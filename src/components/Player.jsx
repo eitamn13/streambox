@@ -39,6 +39,7 @@ function Player() {
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState(null);
   const [hlsInstance, setHlsInstance] = useState(null);
+  const [audioWarning, setAudioWarning] = useState(null);
   const controlsTimeout = useRef(null);
 
   const [addProgress, setAddProgress] = useState('');
@@ -231,6 +232,25 @@ function Player() {
         } else {
           video.src = url;
           video.play().catch(() => {});
+          // Check for audio track after a short delay
+          setTimeout(() => {
+            const hasAudio = video.audioTracks?.length > 0 || video.webkitAudioTracks?.length > 0 || video.mozHasAudio;
+            const isMkv = url.match(/\.mkv($|\?)/i);
+            if (!hasAudio && !isMkv) {
+              // Some browsers don't expose audioTracks; check volume
+              if (video.volume > 0 && !video.muted && video.readyState >= 2) {
+                // Possibly no audio — warn after a few seconds
+                setTimeout(() => {
+                  if (video.currentTime > 0 && !video.paused) {
+                    setAudioWarning('אין שמע זמין במקור זה. נסה מקור אחר.');
+                  }
+                }, 3000);
+              }
+            }
+            if (isMkv) {
+              setAudioWarning('קובץ MKV זוהה — השמע עשוי לא לעבוד בדפדפן. נסה מקור אחר או פתח ב-VLC.');
+            }
+          }, 1000);
         }
       } catch (_err) {
         setError('שגיאת טעינת סטרים');
@@ -361,6 +381,7 @@ function Player() {
     setCurrentStream(stream);
     setShowStreamPicker(false);
     setError(null);
+    setAudioWarning(null);
   };
 
   const handleRetry = () => {
@@ -378,6 +399,8 @@ function Player() {
 
   const isDirectStream = currentStream && (currentStream.type === 'direct' || currentStream.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
   const isIframe = currentStream && currentStream.type === 'iframe';
+  const isMagnet = currentStream && currentStream.type === 'magnet';
+  const isTorrent = currentStream && currentStream.type === 'torrent';
   const hasStreams = streams.length > 0;
   const isBusy = streamLoading || addProgress;
 
@@ -451,6 +474,27 @@ function Player() {
         )}
 
         {/* Center Play Button */}
+        {(isMagnet || isTorrent) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+            <div className="text-center p-6 max-w-md">
+              <MonitorPlay className="w-12 h-12 text-sb-red mx-auto mb-3" />
+              <h3 className="text-white font-semibold mb-2">מקור ישיר (טורנט)</h3>
+              <p className="text-sb-gray text-sm mb-4">
+                {isMagnet ? 'Magnet link' : 'קובץ .torrent'} — דורש נגן חיצוני כמו VLC או Webtorrent
+              </p>
+              <a
+                href={currentStream.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-sb-red hover:bg-sb-red-hover text-white rounded-xl font-medium text-sm transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                פתח בנגן חיצוני
+              </a>
+            </div>
+          </div>
+        )}
+
         {!playing && isDirectStream && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <button
@@ -458,6 +502,19 @@ function Player() {
               className="w-20 h-20 rounded-full bg-sb-red/90 hover:bg-sb-red flex items-center justify-center pointer-events-auto transition-colors"
             >
               <Play className="w-8 h-8 text-white ml-1" fill="white" />
+            </button>
+          </div>
+        )}
+
+        {/* Audio Warning */}
+        {audioWarning && !error && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 bg-yellow-500/90 text-black px-4 py-2 rounded-lg text-sm font-medium shadow-lg max-w-md text-center">
+            {audioWarning}
+            <button
+              onClick={(e) => { e.stopPropagation(); setAudioWarning(null); }}
+              className="mr-2 font-bold hover:opacity-70"
+            >
+              ✕
             </button>
           </div>
         )}

@@ -457,12 +457,12 @@ async function resolveStream(torrent, usedProviders) {
   // 1. Real-Debrid (instant cache check first, then fast add)
   if (ADMIN_RD_KEY && !usedProviders.has('rd')) {
     try {
-      const isAvailable = await withTimeout(checkRDAvailability(infoHash), 6000, 'RD availability');
+      const isAvailable = await withTimeout(checkRDAvailability(infoHash), 5000, 'RD availability');
       console.log(`[content] RD availability for ${infoHash.substring(0, 12)}:`, isAvailable);
 
       // If available in cache, try RD immediately
       if (isAvailable) {
-        const rdStreams = await withTimeout(getRDStream(infoHash, title), 10000, 'RD stream');
+        const rdStreams = await withTimeout(getRDStream(infoHash, title), 8000, 'RD stream');
         if (rdStreams && rdStreams.length > 0) {
           for (const s of rdStreams) {
             streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
@@ -472,7 +472,7 @@ async function resolveStream(torrent, usedProviders) {
         }
       }
       // Even if not in instant cache, try a quick add (RD may have it cached soon)
-      const rdStreams = await withTimeout(getRDStream(infoHash, title), 8000, 'RD stream (non-cached)');
+      const rdStreams = await withTimeout(getRDStream(infoHash, title), 6000, 'RD stream (non-cached)');
       if (rdStreams && rdStreams.length > 0) {
         for (const s of rdStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
@@ -498,7 +498,7 @@ async function resolveStream(torrent, usedProviders) {
   // 3. Premiumize
   if (ADMIN_PM_KEY && !usedProviders.has('pm')) {
     try {
-      const pmStreams = await withTimeout(getPMStream(infoHash, title), 8000, 'PM stream');
+      const pmStreams = await withTimeout(getPMStream(infoHash, title), 6000, 'PM stream');
       if (pmStreams && pmStreams.length > 0) {
         for (const s of pmStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'pm' });
@@ -514,7 +514,7 @@ async function resolveStream(torrent, usedProviders) {
   // 4. TorBox
   if (ADMIN_TB_KEY && !usedProviders.has('tb')) {
     try {
-      const tbStreams = await withTimeout(getTBStream(infoHash, title), 8000, 'TB stream');
+      const tbStreams = await withTimeout(getTBStream(infoHash, title), 6000, 'TB stream');
       if (tbStreams && tbStreams.length > 0) {
         for (const s of tbStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'tb' });
@@ -531,7 +531,7 @@ async function resolveStream(torrent, usedProviders) {
 }
 
 // ------------------------------------------------------------------
-// Main handler — global 10s timeout, fast fail
+// Main handler — global 8s timeout, fast fail
 // ------------------------------------------------------------------
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -561,16 +561,21 @@ export default async function handler(req, res) {
   const searchTitle = title || '';
   console.log(`[content] ${imdbId || '-'} "${searchTitle}" ${type || 'movie'} S${season || '-'}E${episode || '-'} plan=${subCheck.plan}`);
 
-  // 2. Search torrents (parallel, 10s timeout each)
+  // 2. Search torrents (parallel, 8s timeout each)
   const [torrentioResults, ytsResults] = await Promise.all([
-    withTimeout(searchTorrentio(imdbId, type, season, episode), 10000, 'Torrentio'),
-    type !== 'series' ? withTimeout(searchYts(imdbId), 8000, 'YTS') : Promise.resolve([]),
+    withTimeout(searchTorrentio(imdbId, type, season, episode), 8000, 'Torrentio'),
+    type !== 'series' ? withTimeout(searchYts(imdbId), 6000, 'YTS') : Promise.resolve([]),
   ]).catch(() => [[], []]);
 
-  const allTorrents = [...torrentioResults, ...ytsResults];
-  console.log(`[content] Torrents: ${allTorrents.length}`);
+  // Filter by quality: 4K and 1080p only (reject 720p and below)
+  const allowedQualities = new Set(['4K', '1080p']);
+  const filteredTorrents = [...torrentioResults, ...ytsResults].filter(t => allowedQualities.has(t.quality));
+  // If no high-quality torrents found, fallback to any quality
+  const allTorrents = filteredTorrents.length > 0 ? filteredTorrents : [...torrentioResults, ...ytsResults];
 
-  // 3. Resolve streams via debrid chain — each torrent gets max 10s
+  console.log(`[content] Torrents: ${allTorrents.length} (after quality filter)`);
+
+  // 3. Resolve streams via debrid chain — each torrent gets max 8s
   const streams = [];
   const checkedHashes = new Set();
   const usedProviders = new Set();
@@ -580,7 +585,7 @@ export default async function handler(req, res) {
     checkedHashes.add(torrent.infoHash);
 
     try {
-      const resolved = await withTimeout(resolveStream(torrent, usedProviders), 10000, 'resolveStream');
+      const resolved = await withTimeout(resolveStream(torrent, usedProviders), 8000, 'resolveStream');
       if (resolved && resolved.length > 0) {
         streams.push(...resolved);
         // Continue trying other hashes for backup streams
