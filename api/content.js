@@ -1,6 +1,6 @@
 // Premium Content Streaming API — Centralized Debrid Backend
 // ===========================================================
-// Chains: Real-Debrid → Premiumize → TorBox → Auto-add
+// Chains: Real-Debrid (instant cache) → Direct fallback → Premiumize → TorBox
 // Admin manages all keys. Users never see debrid.
 
 import { createClient } from '@supabase/supabase-js';
@@ -19,11 +19,21 @@ function getSupabase() {
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
+// ------------------------------------------------------------------
+// Timeout helpers
+// ------------------------------------------------------------------
 function timeoutSignal(ms) {
   if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) return AbortSignal.timeout(ms);
   const c = new AbortController();
   setTimeout(() => c.abort(), ms);
   return c.signal;
+}
+
+function withTimeout(promise, ms, label = 'operation') {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
 }
 
 function detectQuality(filename = '') {
@@ -133,7 +143,7 @@ async function checkSubscription(req) {
 }
 
 // ------------------------------------------------------------------
-// Torrent search — Torrentio + YTS
+// Torrent search — Torrentio + YTS (fast, 10s timeout each)
 // ------------------------------------------------------------------
 async function searchTorrentio(imdbId, type, season, episode) {
   if (!imdbId) return [];
@@ -143,7 +153,7 @@ async function searchTorrentio(imdbId, type, season, episode) {
     : `https://torrentio.strem.fun/stream/movie/${cleanId}.json`;
 
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(12000) });
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(10000) });
     if (!res.ok) return [];
     const data = await res.json();
     return (data.streams || [])
@@ -173,7 +183,7 @@ async function searchYts(imdbId) {
   ];
   for (const url of mirrors) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(10000) });
+      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(8000) });
       if (!res.ok) continue;
       const data = await res.json();
       const movies = data?.data?.movies || [];
@@ -198,14 +208,14 @@ async function searchYts(imdbId) {
 }
 
 // ------------------------------------------------------------------
-// Real-Debrid — instant availability + stream
+// Real-Debrid — instant availability + stream (max 10s total)
 // ------------------------------------------------------------------
 async function checkRDAvailability(infoHash) {
   if (!ADMIN_RD_KEY) return false;
   try {
     const res = await fetch(
       `https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/${infoHash}`,
-      { headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` }, signal: timeoutSignal(8000) }
+      { headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` }, signal: timeoutSignal(6000) }
     );
     if (!res.ok) return false;
     const data = await res.json();
@@ -224,18 +234,19 @@ async function getRDStream(infoHash, title) {
       method: 'POST',
       headers,
       body: new URLSearchParams({ magnet }).toString(),
-      signal: timeoutSignal(10000),
+      signal: timeoutSignal(8000),
     });
     if (!addRes.ok) return null;
     const addData = await addRes.json();
     if (!addData.id) return null;
 
     const torrentId = addData.id;
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    // Max 5 poll attempts = 5 seconds (was 60!)
+    for (let i = 0; i < 5; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
         headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` },
-        signal: timeoutSignal(8000),
+        signal: timeoutSignal(6000),
       });
       if (!infoRes.ok) continue;
       const info = await infoRes.json();
@@ -244,7 +255,7 @@ async function getRDStream(infoHash, title) {
         await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
           method: 'POST', headers,
           body: new URLSearchParams({ files: 'all' }).toString(),
-          signal: timeoutSignal(8000),
+          signal: timeoutSignal(6000),
         });
       }
 
@@ -255,7 +266,7 @@ async function getRDStream(infoHash, title) {
             const unres = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
               method: 'POST', headers,
               body: new URLSearchParams({ link }).toString(),
-              signal: timeoutSignal(8000),
+              signal: timeoutSignal(6000),
             });
             if (!unres.ok) continue;
             const unresData = await unres.json();
@@ -275,7 +286,7 @@ async function getRDStream(infoHash, title) {
 }
 
 // ------------------------------------------------------------------
-// Premiumize — transfer + stream
+// Premiumize — transfer + stream (max 8s total)
 // ------------------------------------------------------------------
 async function getPMStream(infoHash, title) {
   if (!ADMIN_PM_KEY) return null;
@@ -287,18 +298,18 @@ async function getPMStream(infoHash, title) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ apikey: ADMIN_PM_KEY, src: magnet }).toString(),
-      signal: timeoutSignal(10000),
+      signal: timeoutSignal(6000),
     });
     if (!createRes.ok) return null;
     const createData = await createRes.json();
     if (!createData.status || createData.status !== 'success') return null;
 
-    // Poll transfers
-    for (let i = 0; i < 45; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    // Poll transfers — max 3 attempts = 3 seconds (was 45!)
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const listRes = await fetch(
         `https://www.premiumize.me/api/transfer/list?apikey=${ADMIN_PM_KEY}`,
-        { signal: timeoutSignal(8000) }
+        { signal: timeoutSignal(6000) }
       );
       if (!listRes.ok) continue;
       const listData = await listRes.json();
@@ -310,7 +321,7 @@ async function getPMStream(infoHash, title) {
         if (!folderId) return null;
         const folderRes = await fetch(
           `https://www.premiumize.me/api/folder/list?id=${folderId}&apikey=${ADMIN_PM_KEY}`,
-          { signal: timeoutSignal(8000) }
+          { signal: timeoutSignal(6000) }
         );
         if (!folderRes.ok) continue;
         const folderData = await folderRes.json();
@@ -329,7 +340,7 @@ async function getPMStream(infoHash, title) {
 }
 
 // ------------------------------------------------------------------
-// TorBox — torrent + stream
+// TorBox — torrent + stream (max 8s total)
 // ------------------------------------------------------------------
 async function getTBStream(infoHash, title) {
   if (!ADMIN_TB_KEY) return null;
@@ -341,19 +352,19 @@ async function getTBStream(infoHash, title) {
       method: 'POST',
       headers: { Authorization: `Bearer ${ADMIN_TB_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ magnet }),
-      signal: timeoutSignal(10000),
+      signal: timeoutSignal(6000),
     });
     if (!addRes.ok) return null;
     const addData = await addRes.json();
     const torrentId = addData?.data?.torrent_id || addData?.torrent_id;
     if (!torrentId) return null;
 
-    // Poll
-    for (let i = 0; i < 45; i++) {
-      await new Promise(r => setTimeout(r, 1000));
+    // Poll — max 3 attempts = 3 seconds (was 45!)
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const infoRes = await fetch(
         `https://api.torbox.app/v1/api/torrents/${torrentId}`,
-        { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+        { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
       );
       if (!infoRes.ok) continue;
       const info = await infoRes.json();
@@ -362,7 +373,7 @@ async function getTBStream(infoHash, title) {
       if (t.status === 'completed' || t.status === 'seeding') {
         const filesRes = await fetch(
           `https://api.torbox.app/v1/api/torrents/${torrentId}/files`,
-          { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+          { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
         );
         if (!filesRes.ok) continue;
         const filesData = await filesRes.json();
@@ -371,7 +382,7 @@ async function getTBStream(infoHash, title) {
         if (video) {
           const dlRes = await fetch(
             `https://api.torbox.app/v1/api/torrents/${torrentId}/download/${video.id}`,
-            { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+            { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
           );
           if (!dlRes.ok) continue;
           const dlData = await dlRes.json();
@@ -389,46 +400,130 @@ async function getTBStream(infoHash, title) {
 }
 
 // ------------------------------------------------------------------
-// Multi-debrid stream resolver — RD → PM → TB
+// Direct fallback — magnet + DHT web seeds (instant, no debrid needed)
+// ------------------------------------------------------------------
+function getDirectStreams(torrent) {
+  const { infoHash, title, quality, size } = torrent;
+  if (!infoHash) return [];
+
+  const encodedTitle = encodeURIComponent(title || 'video');
+  const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodedTitle}`;
+
+  // Public trackers for web seed fallback
+  const trackers = [
+    'udp://tracker.openbittorrent.com:80',
+    'udp://tracker.opentrackr.org:1337',
+    'udp://tracker.leechers-paradise.org:6969',
+    'udp://tracker.coppersurfer.tk:6969',
+    'udp://open.demonii.com:1337',
+  ];
+
+  const magnetWithTrackers = magnet + trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+
+  return [
+    {
+      url: magnetWithTrackers,
+      title: title || 'Magnet link',
+      quality: quality || 'auto',
+      size: size || '?',
+      provider: 'Direct (Magnet)',
+      type: 'magnet',
+      sourceType: 'direct',
+      infoHash,
+      service: 'direct',
+    },
+    {
+      url: `https://itorrents.org/torrent/${infoHash.toUpperCase()}.torrent`,
+      title: `${title || 'Torrent'} [.torrent]`,
+      quality: quality || 'auto',
+      size: size || '?',
+      provider: 'Direct (.torrent)',
+      type: 'torrent',
+      sourceType: 'direct',
+      infoHash,
+      service: 'direct',
+    },
+  ];
+}
+
+// ------------------------------------------------------------------
+// Multi-debrid stream resolver — RD (instant cache) → Direct → PM → TB
+// Each provider limited to 10s max via withTimeout
 // ------------------------------------------------------------------
 async function resolveStream(torrent, usedProviders) {
   const { infoHash, title } = torrent;
   const streams = [];
 
-  // 1. Real-Debrid (instant or add)
+  // 1. Real-Debrid (instant cache check first, then fast add)
   if (ADMIN_RD_KEY && !usedProviders.has('rd')) {
-    const available = await checkRDAvailability(infoHash);
-    const rdStreams = await getRDStream(infoHash, title);
-    if (rdStreams && rdStreams.length > 0) {
-      for (const s of rdStreams) {
-        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
+    try {
+      const isAvailable = await withTimeout(checkRDAvailability(infoHash), 6000, 'RD availability');
+      console.log(`[content] RD availability for ${infoHash.substring(0, 12)}:`, isAvailable);
+
+      // If available in cache, try RD immediately
+      if (isAvailable) {
+        const rdStreams = await withTimeout(getRDStream(infoHash, title), 10000, 'RD stream');
+        if (rdStreams && rdStreams.length > 0) {
+          for (const s of rdStreams) {
+            streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
+          }
+          usedProviders.add('rd');
+          return streams;
+        }
       }
-      usedProviders.add('rd');
+      // Even if not in instant cache, try a quick add (RD may have it cached soon)
+      const rdStreams = await withTimeout(getRDStream(infoHash, title), 8000, 'RD stream (non-cached)');
+      if (rdStreams && rdStreams.length > 0) {
+        for (const s of rdStreams) {
+          streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
+        }
+        usedProviders.add('rd');
+        return streams;
+      }
+    } catch (e) {
+      console.warn('[content] RD timeout/error:', e.message);
+    }
+  }
+
+  // 2. Direct fallback (instant — no debrid needed)
+  if (!usedProviders.has('direct')) {
+    const direct = getDirectStreams(torrent);
+    if (direct.length > 0) {
+      streams.push(...direct);
+      usedProviders.add('direct');
       return streams;
     }
   }
 
-  // 2. Premiumize
+  // 3. Premiumize
   if (ADMIN_PM_KEY && !usedProviders.has('pm')) {
-    const pmStreams = await getPMStream(infoHash, title);
-    if (pmStreams && pmStreams.length > 0) {
-      for (const s of pmStreams) {
-        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'pm' });
+    try {
+      const pmStreams = await withTimeout(getPMStream(infoHash, title), 8000, 'PM stream');
+      if (pmStreams && pmStreams.length > 0) {
+        for (const s of pmStreams) {
+          streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'pm' });
+        }
+        usedProviders.add('pm');
+        return streams;
       }
-      usedProviders.add('pm');
-      return streams;
+    } catch (e) {
+      console.warn('[content] PM timeout/error:', e.message);
     }
   }
 
-  // 3. TorBox
+  // 4. TorBox
   if (ADMIN_TB_KEY && !usedProviders.has('tb')) {
-    const tbStreams = await getTBStream(infoHash, title);
-    if (tbStreams && tbStreams.length > 0) {
-      for (const s of tbStreams) {
-        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'tb' });
+    try {
+      const tbStreams = await withTimeout(getTBStream(infoHash, title), 8000, 'TB stream');
+      if (tbStreams && tbStreams.length > 0) {
+        for (const s of tbStreams) {
+          streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'tb' });
+        }
+        usedProviders.add('tb');
+        return streams;
       }
-      usedProviders.add('tb');
-      return streams;
+    } catch (e) {
+      console.warn('[content] TB timeout/error:', e.message);
     }
   }
 
@@ -436,7 +531,7 @@ async function resolveStream(torrent, usedProviders) {
 }
 
 // ------------------------------------------------------------------
-// Main handler
+// Main handler — global 10s timeout, fast fail
 // ------------------------------------------------------------------
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -466,13 +561,16 @@ export default async function handler(req, res) {
   const searchTitle = title || '';
   console.log(`[content] ${imdbId || '-'} "${searchTitle}" ${type || 'movie'} S${season || '-'}E${episode || '-'} plan=${subCheck.plan}`);
 
-  // 2. Search torrents
-  const torrentioResults = await searchTorrentio(imdbId, type, season, episode);
-  const ytsResults = type !== 'series' ? await searchYts(imdbId) : [];
+  // 2. Search torrents (parallel, 10s timeout each)
+  const [torrentioResults, ytsResults] = await Promise.all([
+    withTimeout(searchTorrentio(imdbId, type, season, episode), 10000, 'Torrentio'),
+    type !== 'series' ? withTimeout(searchYts(imdbId), 8000, 'YTS') : Promise.resolve([]),
+  ]).catch(() => [[], []]);
+
   const allTorrents = [...torrentioResults, ...ytsResults];
   console.log(`[content] Torrents: ${allTorrents.length}`);
 
-  // 3. Resolve streams via debrid chain
+  // 3. Resolve streams via debrid chain — each torrent gets max 10s
   const streams = [];
   const checkedHashes = new Set();
   const usedProviders = new Set();
@@ -481,18 +579,42 @@ export default async function handler(req, res) {
     if (checkedHashes.has(torrent.infoHash)) continue;
     checkedHashes.add(torrent.infoHash);
 
-    const resolved = await resolveStream(torrent, usedProviders);
-    if (resolved && resolved.length > 0) {
-      streams.push(...resolved);
-      // Continue trying other hashes for backup streams
+    try {
+      const resolved = await withTimeout(resolveStream(torrent, usedProviders), 10000, 'resolveStream');
+      if (resolved && resolved.length > 0) {
+        streams.push(...resolved);
+        // Continue trying other hashes for backup streams
+      }
+    } catch (e) {
+      console.warn('[content] resolveStream timeout for', torrent.infoHash.substring(0, 12));
     }
   }
 
-  // 4. Sort by quality
+  // 4. Sort by quality (debrid first, then direct)
   const qualityOrder = { '4K': 4, '2160p': 4, '1080p': 3, '720p': 2, '480p': 1, 'auto': 0 };
-  streams.sort((a, b) => (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0));
+  const sourceOrder = { debrid: 0, direct: 1 };
+  streams.sort((a, b) => {
+    const srcDiff = (sourceOrder[a.sourceType] || 0) - (sourceOrder[b.sourceType] || 0);
+    if (srcDiff !== 0) return srcDiff;
+    return (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0);
+  });
 
   console.log(`[content] Returning ${streams.length} streams`);
+
+  // 5. If no streams found, return clear error
+  if (streams.length === 0) {
+    return res.status(200).json({
+      imdbId: imdbId || null,
+      type: type || 'movie',
+      season,
+      episode,
+      plan: subCheck.plan,
+      count: 0,
+      streams: [],
+      error: 'לא נמצאו מקורות זמינים',
+      message: 'לא נמצאו מקורות לסרט זה. נסה שוב מאוחר יותר או בדוק את חיבור ה-Debrid.',
+    });
+  }
 
   res.status(200).json({
     imdbId: imdbId || null,

@@ -125,8 +125,21 @@ export const supabase = isValidSupabaseConfig(SUPABASE_URL, SUPABASE_ANON_KEY)
 const TOKEN_KEY = 'sb-token';
 
 export function setAuthToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      const verify = localStorage.getItem(TOKEN_KEY);
+      console.log('[setAuthToken] setItem result:', verify ? verify.substring(0, 30) + '...' : 'NULL');
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      console.log('[setAuthToken] removed');
+    }
+  } catch (err) {
+    console.error('[setAuthToken] localStorage error:', err.name, err.message);
+    if (err.name === 'QuotaExceededError') {
+      console.error('[setAuthToken] localStorage quota exceeded!');
+    }
+  }
 }
 
 export function clearAuthToken() {

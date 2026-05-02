@@ -34,9 +34,16 @@ export default function Login() {
       setSession(data.session);
       if (data.session?.access_token) {
         try {
+          console.log('[Login] About to call setAuthToken...');
           setAuthToken(data.session.access_token);
           const saved = localStorage.getItem('sb-token');
-          console.log('[Login] Token saved, sb-token:', saved ? saved.substring(0, 30) + '...' : 'NULL');
+          console.log('[Login] After setAuthToken, sb-token in localStorage:', saved ? saved.substring(0, 30) + '...' : 'NULL');
+          // Double-check after a tick to see if something clears it
+          setTimeout(() => {
+            const afterTick = localStorage.getItem('sb-token');
+            if (!afterTick) console.warn('[Login] WARNING: sb-token was cleared after 0ms!');
+            else console.log('[Login] sb-token still present after 0ms');
+          }, 0);
         } catch (storageErr) {
           console.error('[Login] localStorage save failed:', storageErr);
         }

@@ -57,6 +57,7 @@ export function AppProvider({ children }) {
       if (data.session?.access_token) setAuthToken(data.session.access_token);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('[AppContext] onAuthStateChange event:', event, 'hasSession:', !!newSession);
       setSession(newSession);
       setIsAdmin(newSession?.user?.email?.includes('admin') || false);
       // Sync token to localStorage for API calls
