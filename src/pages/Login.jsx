@@ -21,22 +21,38 @@ export default function Login() {
     setError('');
     setLoading(true);
     console.log('[Login] Attempting login for:', email);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log('[Login] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
-    setLoading(false);
-    if (error) {
-      console.error('[Login] Error:', error.message);
-      setError(error.message);
-    } else {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      console.log('[Login] Response:', { hasData: !!data, hasError: !!error, session: data?.session, user: data?.user });
+      setLoading(false);
+      if (error) {
+        console.error('[Login] Error:', error.message);
+        setError(error.message);
+        return;
+      }
       console.log('[Login] Success, token:', data.session?.access_token);
       setSession(data.session);
       if (data.session?.access_token) {
-        setAuthToken(data.session.access_token);
-        console.log('[Login] Token saved, sb-token:', localStorage.getItem('sb-token'));
+        try {
+          setAuthToken(data.session.access_token);
+          const saved = localStorage.getItem('sb-token');
+          console.log('[Login] Token saved, sb-token:', saved ? saved.substring(0, 30) + '...' : 'NULL');
+        } catch (storageErr) {
+          console.error('[Login] localStorage save failed:', storageErr);
+        }
       } else {
-        console.warn('[Login] No access_token in session!');
+        console.warn('[Login] No access_token in session! Trying getSession fallback...');
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.access_token) {
+          setAuthToken(sessionData.session.access_token);
+          console.log('[Login] Token saved via getSession fallback');
+        }
       }
       navigate(redirectTo);
+    } catch (err) {
+      console.error('[Login] Unexpected error:', err);
+      setError(err.message || 'Login failed');
+      setLoading(false);
     }
   };
 

@@ -56,12 +56,18 @@ export function AppProvider({ children }) {
       // Sync token to localStorage for API calls
       if (data.session?.access_token) setAuthToken(data.session.access_token);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       setIsAdmin(newSession?.user?.email?.includes('admin') || false);
       // Sync token to localStorage for API calls
-      if (newSession?.access_token) setAuthToken(newSession.access_token);
-      else if (!newSession) setAuthToken(null);
+      if (newSession?.access_token) {
+        console.log('[AppContext] Auth event:', event, '- syncing token');
+        setAuthToken(newSession.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        console.log('[AppContext] SIGNED_OUT - clearing token');
+        setAuthToken(null);
+      }
+      // Ignore other events without session (USER_UPDATED, etc.) - DON'T clear token
     });
     // Periodic token sync — ensures sb-token stays in sync even if something clears it
     const syncInterval = setInterval(() => {

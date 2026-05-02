@@ -27,26 +27,37 @@ export default function Signup() {
     }
     setLoading(true);
     console.log('[Signup] Attempting signup for:', email);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name } },
-    });
-    console.log('[Signup] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
-    setLoading(false);
-    if (error) {
-      console.error('[Signup] Error:', error.message);
-      setError(error.message);
-    } else {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } },
+      });
+      console.log('[Signup] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
+      setLoading(false);
+      if (error) {
+        console.error('[Signup] Error:', error.message);
+        setError(error.message);
+        return;
+      }
       console.log('[Signup] Success, token:', data.session?.access_token);
       setSession(data.session);
       if (data.session?.access_token) {
-        setAuthToken(data.session.access_token);
-        console.log('[Signup] Token saved, sb-token:', localStorage.getItem('sb-token'));
+        try {
+          setAuthToken(data.session.access_token);
+          const saved = localStorage.getItem('sb-token');
+          console.log('[Signup] Token saved, sb-token:', saved ? saved.substring(0, 30) + '...' : 'NULL');
+        } catch (storageErr) {
+          console.error('[Signup] localStorage save failed:', storageErr);
+        }
       } else {
         console.warn('[Signup] No access_token in session!');
       }
       navigate(redirectTo);
+    } catch (err) {
+      console.error('[Signup] Unexpected error:', err);
+      setError(err.message || 'Signup failed');
+      setLoading(false);
     }
   };
 
