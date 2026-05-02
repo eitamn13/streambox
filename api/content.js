@@ -47,8 +47,9 @@ async function isAdminUser(supabase, user) {
       .select('is_admin')
       .eq('user_id', user.id)
       .single();
+    console.log('[content] subscriptions is_admin:', { userId: user.id, data, error: error?.message || null });
     if (data?.is_admin) return true;
-  } catch { /* ignore */ }
+  } catch (e) { console.log('[content] subscriptions check error:', e.message); }
   // 2. Check users table as fallback
   try {
     const { data, error } = await supabase
@@ -56,10 +57,13 @@ async function isAdminUser(supabase, user) {
       .select('is_admin')
       .eq('id', user.id)
       .single();
+    console.log('[content] users is_admin:', { userId: user.id, data, error: error?.message || null });
     if (data?.is_admin) return true;
-  } catch { /* ignore */ }
+  } catch (e) { console.log('[content] users check error:', e.message); }
   // 3. Fallback: email contains 'admin'
-  return user.email?.includes('admin') || false;
+  const emailAdmin = user.email?.includes('admin') || false;
+  console.log('[content] email admin check:', user.email, emailAdmin);
+  return emailAdmin;
 }
 
 // ------------------------------------------------------------------
@@ -67,6 +71,7 @@ async function isAdminUser(supabase, user) {
 // ------------------------------------------------------------------
 async function checkSubscription(req) {
   const authHeader = req.headers.authorization;
+  console.log('[content] Auth header:', authHeader ? `${authHeader.slice(0, 20)}...` : 'MISSING');
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, plan: 'free', status: 'none', reason: 'לא מחובר' };
   }
@@ -74,26 +79,46 @@ async function checkSubscription(req) {
   const token = authHeader.slice(7);
   const supabase = getSupabase();
   if (!supabase) {
+    console.log('[content] Dev fallback — no Supabase config');
     return { ok: true, plan: 'premium', status: 'active' }; // Dev fallback
   }
 
   try {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    console.log('[content] Auth result:', { userId: user?.id, email: user?.email, authErr: authErr?.message || null });
     if (authErr || !user) {
       return { ok: false, plan: 'free', status: 'none', reason: 'סשן לא תקין' };
     }
 
     // Admin gets premium automatically — no Stripe needed
     const isAdmin = await isAdminUser(supabase, user);
+    console.log('[content] isAdmin result:', isAdmin);
     if (isAdmin) {
       return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
     }
 
-    const { data: sub } = await supabase
+    const { data: sub, error: subError } = await supabase
       .from('subscriptions')
       .select('plan, status, current_period_end')
       .eq('user_id', user.id)
       .single();
+    console.log('[content] Subscription query:', { sub: sub || null, error: subError?.message || null, code: subError?.code || null });
+
+    // If no subscription row found, check users table for admin flag (same as subscription API)
+    if (!sub && subError?.code === 'PGRST116') {
+      console.log('[content] No subscription row, checking users table for admin');
+      try {
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+        console.log('[content] Users table admin check:', userRow);
+        if (userRow?.is_admin) {
+          return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
+        }
+      } catch (e) { /* ignore */ }
+    }
 
     const isActive = sub?.status === 'active' || sub?.status === 'trialing';
     if (!isActive) {
