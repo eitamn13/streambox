@@ -241,7 +241,7 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
                   results.push({
                     url: unrestrict.download,
                     title: unrestrict.filename || filename || 'Real-Debrid',
-                    quality: 'auto',
+                    quality: detectQuality(unrestrict.filename),
                     provider: 'Real-Debrid',
                     type: 'direct',
                     sourceType: 'debrid',
@@ -327,4 +327,140 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
   }
 
   return results;
+}
+
+// ============================================================================
+// NEW: Real-Debrid Library Search + Magnet Search + Auto-Add
+// ============================================================================
+
+function detectQuality(filename = '') {
+  const f = filename.toLowerCase();
+  if (f.includes('2160') || f.includes('4k') || f.includes('uhd')) return '4K';
+  if (f.includes('1080')) return '1080p';
+  if (f.includes('720')) return '720p';
+  if (f.includes('480')) return '480p';
+  return 'auto';
+}
+
+// Search user's existing Real-Debrid torrents by title
+export async function searchRdLibrary(title) {
+  if (!realDebrid.isConfigured()) return [];
+  if (!title) return [];
+
+  try {
+    const torrents = await realDebrid.rdGetTorrents(100);
+    const lowerTitle = title.toLowerCase();
+    const matches = (torrents || []).filter(t =>
+      t.filename?.toLowerCase().includes(lowerTitle)
+    );
+
+    const results = [];
+    for (const match of matches.slice(0, 5)) {
+      try {
+        const info = await realDebrid.rdGetTorrentInfo(match.id);
+        if (info?.links?.length > 0 && info.status === 'downloaded') {
+          for (const link of info.links) {
+            try {
+              const unrestrict = await realDebrid.rdUnrestrictLink(link);
+              if (unrestrict?.download) {
+                results.push({
+                  url: unrestrict.download,
+                  title: unrestrict.filename || match.filename || title,
+                  quality: detectQuality(unrestrict.filename || match.filename),
+                  provider: 'Real-Debrid',
+                  type: 'direct',
+                  sourceType: 'debrid',
+                  info: ['בספרייה שלך', unrestrict.filename],
+                });
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    return results;
+  } catch (e) {
+    console.warn('RD library search failed:', e);
+    return [];
+  }
+}
+
+// Search YTS for magnets
+export async function searchYtsMagnets(title, year = '') {
+  try {
+    const query = year ? `${title} ${year}` : title;
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=5`)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const movies = data.data?.movies || [];
+
+    const results = [];
+    for (const movie of movies) {
+      for (const torrent of (movie.torrents || [])) {
+        const hash = torrent.hash;
+        const magnet = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(movie.title_long || movie.title)}`;
+        results.push({
+          title: movie.title_long || movie.title,
+          year: movie.year,
+          quality: torrent.quality,
+          type: torrent.type,
+          size: torrent.size,
+          magnet,
+          hash,
+          seeds: torrent.seeds,
+          peers: torrent.peers,
+        });
+      }
+    }
+    return results;
+  } catch (e) {
+    console.warn('YTS search failed:', e);
+    return [];
+  }
+}
+
+// Add magnet to Real-Debrid with extended polling (up to 90s)
+export async function addMagnetToRd(magnet, filename = '') {
+  if (!realDebrid.isConfigured()) throw new Error('Real-Debrid לא מחובר');
+
+  const addRes = await realDebrid.rdAddMagnet(magnet);
+  if (!addRes?.id) throw new Error('הוספת המגנט נכשלה');
+
+  const torrentId = addRes.id;
+
+  // Poll for up to 90 seconds
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const info = await realDebrid.rdGetTorrentInfo(torrentId);
+
+    if (info?.status === 'waiting_files_selection') {
+      await realDebrid.rdSelectFiles(torrentId, 'all');
+    }
+
+    if (info?.links?.length > 0 && info.status === 'downloaded') {
+      const results = [];
+      for (const link of info.links) {
+        try {
+          const unrestrict = await realDebrid.rdUnrestrictLink(link);
+          if (unrestrict?.download) {
+            results.push({
+              url: unrestrict.download,
+              title: unrestrict.filename || filename || 'Real-Debrid',
+              quality: detectQuality(unrestrict.filename),
+              provider: 'Real-Debrid',
+              type: 'direct',
+              sourceType: 'debrid',
+              info: ['Premium', unrestrict.filename],
+            });
+          }
+        } catch { /* ignore */ }
+      }
+      return results;
+    }
+
+    if (info?.status === 'error') throw new Error('שגיאה בהורדת הטורנט');
+  }
+
+  throw new Error('הטורנט לקח יותר מדי זמן להתחיל. נסה שוב מאוחר יותר.');
 }

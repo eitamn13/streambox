@@ -2,11 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getContentDetails } from '../core/StreamBoxCore.js';
 import { fetchStreams } from '../core/StreamEngine.js';
+import { searchYtsMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
 import { addToHistory } from '../core/History.js';
 import SubtitleOverlay from './SubtitleOverlay.jsx';
 import {
   ArrowRight, Maximize, Minimize, Volume2, VolumeX, Play, Pause,
-  Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay
+  Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay, Search,
+  Magnet, Film, CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react';
 
 let Hls = null;
@@ -37,6 +39,15 @@ function Player() {
   const [hlsInstance, setHlsInstance] = useState(null);
   const controlsTimeout = useRef(null);
 
+  // Magnet search states
+  const [searchingMagnets, setSearchingMagnets] = useState(false);
+  const [magnetResults, setMagnetResults] = useState([]);
+  const [addingMagnet, setAddingMagnet] = useState(false);
+  const [addProgress, setAddProgress] = useState('');
+  const [showMagnetSearch, setShowMagnetSearch] = useState(false);
+  const [manualMagnet, setManualMagnet] = useState('');
+  const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
+
   // Load content details
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +57,7 @@ function Player() {
       try {
         const details = await getContentDetails(id, type);
         if (!cancelled) setData(details);
-      } catch (e) {
+      } catch (_err) {
         if (!cancelled) setError('טעינת פרטי התוכן נכשלה');
       } finally {
         if (!cancelled) setLoading(false);
@@ -81,15 +92,17 @@ function Player() {
     let cancelled = false;
     async function loadStreams() {
       setStreamLoading(true);
+      setError(null);
       try {
         const results = await fetchStreams(id, type, data.title, data.year);
         if (!cancelled) {
           setStreams(results);
           // Auto-select first direct stream
-          const direct = results.find(s => s.type === 'direct' || s.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
-          if (direct) setCurrentStream(direct);
+          if (results.length > 0) {
+            setCurrentStream(results[0]);
+          }
         }
-      } catch (e) {
+      } catch (_err) {
         console.warn('Stream load failed:', e);
       } finally {
         if (!cancelled) setStreamLoading(false);
@@ -134,7 +147,7 @@ function Player() {
           video.src = url;
           video.play().catch(() => {});
         }
-      } catch (e) {
+      } catch (_err) {
         setError('שגיאת טעינת סטרים');
       }
     };
@@ -248,6 +261,54 @@ function Player() {
     setError(null);
   };
 
+  // Magnet search handlers
+  const handleSearchMagnets = async () => {
+    if (!data?.title) return;
+    setSearchingMagnets(true);
+    setMagnetResults([]);
+    setError(null);
+    try {
+      const results = await searchYtsMagnets(data.title, data.year);
+      setMagnetResults(results);
+      if (results.length === 0) {
+        setError('לא נמצאו מגנטים לסרט זה');
+      }
+    } catch (_err) {
+      setError('חיפוש המגנטים נכשל');
+    } finally {
+      setSearchingMagnets(false);
+    }
+  };
+
+  const handleAddMagnet = async (magnet, title) => {
+    setAddingMagnet(true);
+    setAddProgress('מוסיף מגנט ל-Real-Debrid...');
+    setError(null);
+    try {
+      const results = await addMagnetToRd(magnet, title);
+      if (results.length > 0) {
+        setStreams(prev => [...prev, ...results]);
+        setCurrentStream(results[0]);
+        setShowMagnetSearch(false);
+        setMagnetResults([]);
+        setAddProgress('');
+      } else {
+        setError('לא נמצאו קבצים להורדה');
+      }
+    } catch (_err) {
+      setError(e.message || 'הוספת המגנט נכשלה');
+    } finally {
+      setAddingMagnet(false);
+      setAddProgress('');
+    }
+  };
+
+  const handleAddManualMagnet = async () => {
+    if (!manualMagnet.trim()) return;
+    await handleAddMagnet(manualMagnet.trim(), data?.title);
+    setManualMagnet('');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -257,6 +318,7 @@ function Player() {
   }
 
   const isDirectStream = currentStream && (currentStream.type === 'direct' || currentStream.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
+  const hasStreams = streams.length > 0;
 
   return (
     <div ref={containerRef} className={`bg-black flex flex-col ${fullscreen ? 'fixed inset-0 z-[100]' : 'min-h-screen'}`}>
@@ -288,34 +350,119 @@ function Player() {
             muted={muted}
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           />
-        ) : currentStream?.url?.includes('youtube.com/embed') ? (
-          <iframe
-            src={currentStream.url}
-            className="w-full h-full max-h-[70vh]"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            title={data?.title || 'Video'}
-            onClick={(e) => e.stopPropagation()}
-          />
         ) : (
           <div className="text-center p-8 max-w-lg">
             <MonitorPlay className="w-16 h-16 text-sb-gray mx-auto mb-4" />
             <h2 className="text-xl text-white mb-2">נגן וידאו</h2>
-            <p className="text-sb-gray max-w-md">
-              {currentStream?.type === 'link'
-                ? 'מקור זה הוא קישור חיצוני. פתח אותו בדפדפן או בחר מקור אחר.'
-                : 'בחר מקור צפייה כדי להתחיל לנגן'}
-            </p>
-            {currentStream?.type === 'link' && (
-              <a
-                href={currentStream.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block mt-4 bg-sb-red hover:bg-sb-red-hover text-white px-5 py-2.5 rounded-lg font-semibold transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                פתח קישור
-              </a>
+
+            {!rdConfigured && (
+              <div className="bg-sb-gold/10 border border-sb-gold/20 rounded-xl p-4 mb-4">
+                <p className="text-sb-gold text-sm">Real-Debrid לא מחובר</p>
+                <Link to="/settings" className="text-sb-red text-sm hover:underline mt-2 inline-block">
+                  התחבר בהגדרות
+                </Link>
+              </div>
+            )}
+
+            {rdConfigured && streamLoading && (
+              <div className="flex items-center justify-center gap-2 text-sb-gray py-4">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                מחפש ב-Real-Debrid...
+              </div>
+            )}
+
+            {rdConfigured && !streamLoading && !hasStreams && (
+              <div className="space-y-4">
+                <p className="text-sb-gray">הסרט לא נמצא בספרייה שלך ב-Real-Debrid</p>
+
+                {!showMagnetSearch ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleSearchMagnets(); setShowMagnetSearch(true); }}
+                      disabled={searchingMagnets}
+                      className="flex items-center justify-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {searchingMagnets ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      חפש מגנט
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowMagnetSearch(true); }}
+                      className="flex items-center justify-center gap-2 bg-sb-surface hover:bg-sb-border text-sb-light px-6 py-3 rounded-xl font-medium transition-colors"
+                    >
+                      <Magnet className="w-4 h-4" />
+                      הדבק מגנט ידנית
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-sb-card rounded-xl p-4 text-left space-y-3" onClick={(e) => e.stopPropagation()}>
+                    {/* Manual magnet input */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={manualMagnet}
+                        onChange={(e) => setManualMagnet(e.target.value)}
+                        placeholder="הדבק קישור מגנט..."
+                        className="flex-1 bg-sb-surface border border-sb-border rounded-lg px-3 py-2 text-sm text-white placeholder-sb-gray outline-none focus:border-sb-red/60"
+                      />
+                      <button
+                        onClick={handleAddManualMagnet}
+                        disabled={!manualMagnet.trim() || addingMagnet}
+                        className="bg-sb-red text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                      >
+                        {addingMagnet ? <Loader2 className="w-4 h-4 animate-spin" /> : 'הוסף'}
+                      </button>
+                    </div>
+
+                    {/* YTS Results */}
+                    {magnetResults.length > 0 && (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <p className="text-white text-sm font-medium">תוצאות חיפוש:</p>
+                        {magnetResults.map((m, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleAddMagnet(m.magnet, m.title)}
+                            disabled={addingMagnet}
+                            className="w-full text-right bg-sb-surface hover:bg-sb-border rounded-lg p-3 transition-colors disabled:opacity-50"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm truncate">{m.title}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-sb-green text-xs font-bold">{m.quality}</span>
+                                  <span className="text-sb-gray text-xs">{m.size}</span>
+                                  <span className="text-sb-gray text-xs">S: {m.seeds}</span>
+                                </div>
+                              </div>
+                              <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {searchingMagnets && (
+                      <div className="flex items-center gap-2 text-sb-gray py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        מחפש מגנטים...
+                      </div>
+                    )}
+
+                    {addProgress && (
+                      <div className="flex items-center gap-2 text-sb-blue py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {addProgress}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => { setShowMagnetSearch(false); setMagnetResults([]); setError(null); }}
+                      className="text-sb-gray text-xs hover:text-white"
+                    >
+                      סגור
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -334,11 +481,12 @@ function Player() {
 
         {/* Error */}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60" onClick={(e) => e.stopPropagation()}>
             <div className="bg-sb-card rounded-xl p-6 text-center max-w-sm mx-4">
+              <AlertCircle className="w-8 h-8 text-sb-red mx-auto mb-2" />
               <p className="text-sb-red font-medium mb-2">{error}</p>
               <button
-                onClick={(e) => { e.stopPropagation(); setError(null); }}
+                onClick={() => setError(null)}
                 className="text-sb-light text-sm hover:text-white"
               >
                 סגור
@@ -370,13 +518,7 @@ function Player() {
                 <button onClick={() => setShowStreamPicker(false)} className="text-sb-gray hover:text-white">✕</button>
               </div>
               <div className="flex-1 overflow-y-auto p-3">
-                {streamLoading && (
-                  <div className="flex items-center justify-center py-12 gap-2 text-sb-gray">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    טוען מקורות...
-                  </div>
-                )}
-                {!streamLoading && streams.length === 0 && (
+                {streams.length === 0 && (
                   <p className="text-center text-sb-gray py-12">לא נמצאו מקורות</p>
                 )}
                 <div className="space-y-2">
@@ -452,13 +594,26 @@ function Player() {
                 />
               </div>
 
-              <button
-                onClick={() => { setShowStreamPicker(true); resetControlsTimeout(); }}
-                className="hidden sm:flex items-center gap-1.5 text-xs text-sb-light hover:text-white bg-sb-surface hover:bg-sb-border px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <MonitorPlay className="w-3.5 h-3.5" />
-                {currentStream?.title?.slice(0, 15) || 'מקור'}
-              </button>
+              {hasStreams && (
+                <button
+                  onClick={() => { setShowStreamPicker(true); resetControlsTimeout(); }}
+                  className="hidden sm:flex items-center gap-1.5 text-xs text-sb-light hover:text-white bg-sb-surface hover:bg-sb-border px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <MonitorPlay className="w-3.5 h-3.5" />
+                  {currentStream?.title?.slice(0, 15) || 'מקור'}
+                </button>
+              )}
+
+              {rdConfigured && !hasStreams && !streamLoading && (
+                <button
+                  onClick={() => { handleSearchMagnets(); setShowMagnetSearch(true); resetControlsTimeout(); }}
+                  disabled={searchingMagnets}
+                  className="flex items-center gap-1.5 text-xs text-white bg-sb-red hover:bg-sb-red-hover px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {searchingMagnets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  חפש מגנט
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">

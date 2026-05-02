@@ -6,7 +6,6 @@ import {
   getCatalog,
   unifiedSearch,
   getContentDetails,
-  getStreamingSources,
 } from '../core/StreamBoxCore.js';
 
 // TMDB Plugin
@@ -75,65 +74,9 @@ export const tmdbPlugin = {
     }));
   },
 
-  async getStreams(id, type) {
-    const [actualType, actualId] = id.includes(':') ? id.split(':') : [type, id];
-    const details = await getContentDetails(actualId, actualType === 'series' ? 'tv' : actualType);
-    const sources = getStreamingSources(details.title, details.imdbId, actualType === 'series' ? 'tv' : actualType);
-    return sources.map(s => ({
-      url: s.url,
-      title: s.name,
-      quality: s.quality,
-      provider: s.provider,
-      type: 'link',
-      info: ['קישור חיצוני'],
-      sourceType: 'aggregator',
-    }));
-  },
-};
-
-// Public Domain Plugin
-// --------------------
-export const publicDomainPlugin = {
-  id: 'community.publicdomain',
-  name: 'Public Domain',
-  version: '1.0.0',
-  description: 'תוכן במתחם הציבורי מ-Archive.org',
-  resources: ['stream'],
-  types: ['movie'],
-
-  async getStreams(id, type) {
-    const [actualType, actualId] = id.includes(':') ? id.split(':') : [type, id];
-    if (actualType !== 'movie') return [];
-
-    try {
-      const res = await fetch(`https://archive.org/advancedsearch.php?q=mediatype:movies+AND+identifier:${encodeURIComponent(actualId)}&output=json&rows=1`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      const docs = data.response?.docs || [];
-      if (docs.length === 0) return [];
-
-      const doc = docs[0];
-      const metadataRes = await fetch(`https://archive.org/metadata/${doc.identifier}`);
-      if (!metadataRes.ok) return [];
-      const meta = await metadataRes.json();
-      const files = meta.files || [];
-      const videoFiles = files.filter(f =>
-        f.name.endsWith('.mp4') || f.name.endsWith('.webm') || f.name.endsWith('.mkv')
-      );
-
-      return videoFiles.map(f => ({
-        url: `https://archive.org/download/${doc.identifier}/${f.name}`,
-        title: f.name,
-        quality: f.name.includes('1080') ? '1080p' : f.name.includes('720') ? '720p' : '480p',
-        provider: 'Archive.org',
-        type: 'direct',
-        size: f.size ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : null,
-        sourceType: 'legal_free',
-      }));
-    } catch (e) {
-      console.warn('Public domain stream fetch failed:', e);
-      return [];
-    }
+  async getStreams(_id, _type) {
+    // DISABLED — Real-Debrid only mode
+    return [];
   },
 };
 
@@ -177,6 +120,5 @@ export const opensubtitlesPlugin = {
 
 export function registerBuiltInPlugins() {
   pluginRegistry.register(tmdbPlugin);
-  pluginRegistry.register(publicDomainPlugin);
   pluginRegistry.register(opensubtitlesPlugin);
 }

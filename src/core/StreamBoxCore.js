@@ -145,45 +145,14 @@ export async function getCatalog(category, page = 1) {
 
 // Streaming Sources (Public/Free Legal Sources)
 // =============================================
-export function getStreamingSources(title, imdbId, type) {
-  const encoded = encodeURIComponent(title);
-  const sources = [];
-
-  // TMDB Watch Providers (Israel)
-  sources.push({
-    name: 'TMDB Providers',
-    url: `https://www.themoviedb.org/${type}/${imdbId || ''}/watch`,
-    type: 'link',
-    quality: 'varies',
-    provider: 'tmdb',
-  });
-
-  // JustWatch Search
-  sources.push({
-    name: 'JustWatch',
-    url: `https://www.justwatch.com/il/search?q=${encoded}`,
-    type: 'link',
-    quality: 'varies',
-    provider: 'justwatch',
-  });
-
-  // Public Domain / Free sources info
-  if (type === 'movie') {
-    sources.push({
-      name: 'Internet Archive',
-      url: `https://archive.org/search?query=${encoded}`,
-      type: 'link',
-      quality: 'varies',
-      provider: 'archive',
-    });
-  }
-
-  return sources;
+// DISABLED — Real-Debrid only mode
+export function getStreamingSources(_title, _imdbId, _type) {
+  return [];
 }
 
 // Recommendations (Trending-based fallback)
 // =========================================
-export async function getRecommendations(watchHistory = []) {
+export async function getRecommendations(_watchHistory = []) {
   const trending = await getCatalog('trending', 1);
   // Return first 5 trending items as fallback recommendations
   return trending.slice(0, 5).map(item => ({

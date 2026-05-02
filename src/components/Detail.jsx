@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getContentDetails } from '../core/StreamBoxCore.js';
 import { fetchStreams } from '../core/StreamEngine.js';
+import { searchYtsMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/History.js';
 import {
   Play, Star, Clock, Calendar, ExternalLink, Film, Bookmark, BookmarkCheck,
-  MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award
+  MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award, Search, Magnet,
+  AlertCircle, CheckCircle
 } from 'lucide-react';
 
 function Detail() {
@@ -17,6 +19,15 @@ function Detail() {
   const [inWatchlist, setInWatchlist] = useState(false);
   const [showAllCast, setShowAllCast] = useState(false);
 
+  // Magnet search states
+  const [searchingMagnets, setSearchingMagnets] = useState(false);
+  const [magnetResults, setMagnetResults] = useState([]);
+  const [addingMagnet, setAddingMagnet] = useState(false);
+  const [showMagnetPanel, setShowMagnetPanel] = useState(false);
+  const [manualMagnet, setManualMagnet] = useState('');
+  const [addError, setAddError] = useState(null);
+  const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -24,14 +35,14 @@ function Detail() {
       setStreamsLoading(true);
       try {
         const details = await getContentDetails(id, type);
-        const streamResults = await fetchStreams(id, type, details?.title, details?.year, details?.id);
+        const streamResults = await fetchStreams(id, type, details?.title, details?.year);
         if (!cancelled) {
           setData(details);
           setStreams(streamResults);
           setInWatchlist(isInWatchlist(id, type));
         }
-      } catch (e) {
-        console.error('Failed to load details:', e);
+      } catch (_err) {
+        console.error('Failed to load details:', _err);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -40,7 +51,7 @@ function Detail() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => { cancelled = true };
   }, [type, id]);
 
   const toggleWatchlist = () => {
@@ -50,6 +61,46 @@ function Detail() {
       addToWatchlist({ id, type, title: data?.title, poster: data?.poster });
     }
     setInWatchlist(!inWatchlist);
+  };
+
+  const handleSearchMagnets = async () => {
+    if (!data?.title) return;
+    setSearchingMagnets(true);
+    setMagnetResults([]);
+    setAddError(null);
+    try {
+      const results = await searchYtsMagnets(data.title, data.year);
+      setMagnetResults(results);
+    } catch (e) {
+      setAddError('חיפוש המגנטים נכשל');
+    } finally {
+      setSearchingMagnets(false);
+    }
+  };
+
+  const handleAddMagnet = async (magnet, title) => {
+    setAddingMagnet(true);
+    setAddError(null);
+    try {
+      const results = await addMagnetToRd(magnet, title);
+      if (results.length > 0) {
+        setStreams(prev => [...prev, ...results]);
+        setShowMagnetPanel(false);
+        setMagnetResults([]);
+      } else {
+        setAddError('לא נמצאו קבצים להורדה');
+      }
+    } catch (e) {
+      setAddError(e.message || 'הוספת המגנט נכשלה');
+    } finally {
+      setAddingMagnet(false);
+    }
+  };
+
+  const handleAddManualMagnet = async () => {
+    if (!manualMagnet.trim()) return;
+    await handleAddMagnet(manualMagnet.trim(), data?.title);
+    setManualMagnet('');
   };
 
   if (loading) {
@@ -73,8 +124,7 @@ function Detail() {
     );
   }
 
-  const directStreams = streams.filter(s => s.type === 'direct' || s.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
-  const linkStreams = streams.filter(s => s.type === 'link');
+  const hasStreams = streams.length > 0;
 
   return (
     <div className="page-transition">
@@ -149,13 +199,24 @@ function Detail() {
             </div>
 
             <div className="flex flex-wrap gap-3 mb-8">
-              <Link
-                to={`/player/${type}/${id}`}
-                className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
-              >
-                <MonitorPlay className="w-5 h-5" />
-                צפה עכשיו
-              </Link>
+              {hasStreams ? (
+                <Link
+                  to={`/player/${type}/${id}`}
+                  className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
+                >
+                  <MonitorPlay className="w-5 h-5" />
+                  צפה עכשיו
+                </Link>
+              ) : (
+                <button
+                  onClick={() => { setShowMagnetPanel(true); handleSearchMagnets(); }}
+                  disabled={!rdConfigured || searchingMagnets}
+                  className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {searchingMagnets ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                  חפש מגנט
+                </button>
+              )}
               <button
                 onClick={toggleWatchlist}
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all ${
@@ -175,24 +236,52 @@ function Detail() {
               {data.tagline && <p className="text-sb-gray italic mt-3 text-sm">"{data.tagline}"</p>}
             </div>
 
-            {/* Streams Section */}
+            {/* Real-Debrid Streams Section */}
             <div className="mb-8">
               <h2 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
                 <MonitorPlay className="w-5 h-5 text-sb-red" />
-                מקורות צפייה
+                מקורות Real-Debrid
               </h2>
-              {streamsLoading ? (
+
+              {!rdConfigured && (
+                <div className="bg-sb-gold/5 border border-sb-gold/20 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-sb-gold shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sb-light text-sm">Real-Debrid לא מחובר</p>
+                      <Link to="/settings" className="text-sb-red text-sm hover:underline mt-1 inline-block">
+                        התחבר ל-Real-Debrid בהגדרות
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {rdConfigured && streamsLoading && (
                 <div className="flex items-center gap-2 text-sb-gray py-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  טוען מקורות...
+                  טוען מקורות מ-Real-Debrid...
                 </div>
-              ) : streams.length === 0 ? (
-                <p className="text-sb-gray text-sm py-4">לא נמצאו מקורות זמינים. התקן תוספים נוספים.</p>
-              ) : (
+              )}
+
+              {rdConfigured && !streamsLoading && !hasStreams && (
+                <div className="bg-sb-card rounded-xl p-4">
+                  <p className="text-sb-gray text-sm">הסרט לא נמצא בספרייה שלך ב-Real-Debrid</p>
+                  <button
+                    onClick={() => { setShowMagnetPanel(true); handleSearchMagnets(); }}
+                    className="flex items-center gap-2 mt-3 text-sm text-sb-red hover:underline"
+                  >
+                    <Search className="w-4 h-4" />
+                    חפש והוסף מגנט
+                  </button>
+                </div>
+              )}
+
+              {hasStreams && (
                 <div className="space-y-2">
-                  {directStreams.map((stream, i) => (
+                  {streams.map((stream, i) => (
                     <Link
-                      key={`d-${i}`}
+                      key={i}
                       to={`/player/${type}/${id}`}
                       className="flex items-center gap-3 bg-sb-card hover:bg-sb-surface p-4 rounded-xl transition-colors group"
                     >
@@ -210,27 +299,81 @@ function Detail() {
                       <ChevronLeft className="w-5 h-5 text-sb-gray group-hover:text-white transition-colors" />
                     </Link>
                   ))}
-                  {linkStreams.map((stream, i) => (
-                    <a
-                      key={`l-${i}`}
-                      href={stream.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 bg-sb-card hover:bg-sb-surface p-4 rounded-xl transition-colors group"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-sb-surface flex items-center justify-center">
-                        <ExternalLink className="w-5 h-5 text-sb-gray" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{stream.title}</p>
-                        <span className="text-sb-gray text-xs">{stream.provider}</span>
-                      </div>
-                      <ExternalLink className="w-4 h-4 text-sb-gray group-hover:text-white transition-colors" />
-                    </a>
-                  ))}
                 </div>
               )}
             </div>
+
+            {/* Magnet Search Panel */}
+            {showMagnetPanel && rdConfigured && (
+              <div className="mb-8 bg-sb-card rounded-2xl border border-sb-border/30 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Magnet className="w-4 h-4 text-sb-red" />
+                    הוספת מגנט
+                  </h3>
+                  <button onClick={() => setShowMagnetPanel(false)} className="text-sb-gray hover:text-white">✕</button>
+                </div>
+
+                {/* Manual input */}
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={manualMagnet}
+                    onChange={(e) => setManualMagnet(e.target.value)}
+                    placeholder="הדבק קישור מגנט..."
+                    className="flex-1 bg-sb-surface border border-sb-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-sb-gray outline-none focus:border-sb-red/60"
+                  />
+                  <button
+                    onClick={handleAddManualMagnet}
+                    disabled={!manualMagnet.trim() || addingMagnet}
+                    className="bg-sb-red text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {addingMagnet ? <Loader2 className="w-4 h-4 animate-spin" /> : 'הוסף'}
+                  </button>
+                </div>
+
+                {/* YTS Results */}
+                {magnetResults.length > 0 && (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <p className="text-sb-light text-sm font-medium">תוצאות חיפוש:</p>
+                    {magnetResults.map((m, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleAddMagnet(m.magnet, m.title)}
+                        disabled={addingMagnet}
+                        className="w-full text-right bg-sb-surface hover:bg-sb-border rounded-lg p-3 transition-colors disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm truncate">{m.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-sb-green text-xs font-bold">{m.quality}</span>
+                              <span className="text-sb-gray text-xs">{m.size}</span>
+                              <span className="text-sb-gray text-xs">S: {m.seeds}</span>
+                            </div>
+                          </div>
+                          <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {searchingMagnets && (
+                  <div className="flex items-center gap-2 text-sb-gray py-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    מחפש מגנטים...
+                  </div>
+                )}
+
+                {addError && (
+                  <div className="flex items-center gap-2 text-sb-red text-sm py-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {addError}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Cast */}
             {data.cast && data.cast.length > 0 && (
