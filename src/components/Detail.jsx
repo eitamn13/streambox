@@ -90,7 +90,9 @@ function Detail() {
     setAddingMagnet(true);
     setAddError(null);
     try {
-      const results = await addMagnetToRd(magnet, title);
+      const results = await addMagnetToRd(magnet, title, (msg) => {
+        console.log('[Detail] RD progress:', msg);
+      });
       if (results.length > 0) {
         const filtered = filterStreams(results);
         setStreams(prev => [...prev, ...filtered]);

@@ -51,7 +51,7 @@ function Player() {
   const [showMagnetSearch, setShowMagnetSearch] = useState(false);
   const [manualMagnet, setManualMagnet] = useState('');
   const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
-  const [autoPlayAttempted, setAutoPlayAttempted] = useState(false);
+  const autoPlayAttemptedRef = useRef(false);
 
   // Auto-subtitle states
   const [autoSubtitles, setAutoSubtitles] = useState([]);
@@ -110,6 +110,7 @@ function Player() {
   useEffect(() => {
     if (!data) return;
     let cancelled = false;
+    console.log('[Player] loadStreams effect started for', data.title);
 
     async function loadStreams() {
       setStreamLoading(true);
@@ -118,6 +119,7 @@ function Player() {
       try {
         // 1. Check subscription
         const check = watchCheck();
+        console.log('[Player] Subscription check:', check);
         if (!check.allowed) {
           if (!cancelled) {
             setError(check.reason);
@@ -127,22 +129,28 @@ function Player() {
         }
 
         // 2. Search existing RD library
+        console.log('[Player] Searching RD library...');
         const results = await fetchStreams(id, type, data.title, data.year);
+        console.log('[Player] RD library results:', results.length);
         const filtered = filterStreams(results);
 
         if (!cancelled) {
           setStreams(filtered);
           if (filtered.length > 0) {
+            console.log('[Player] Found streams in RD library, playing');
             setCurrentStream(filtered[0]);
             recordWatch();
-          } else if (rdConfigured && !autoPlayAttempted) {
+          } else if (rdConfigured && !autoPlayAttemptedRef.current) {
             // 3. Auto-search magnets if nothing in library
-            setAutoPlayAttempted(true);
+            autoPlayAttemptedRef.current = true;
+            console.log('[Player] No library streams, starting auto-search');
             await autoSearchAndPlay();
+          } else {
+            console.log('[Player] No library streams, auto-play already attempted or RD not configured');
           }
         }
       } catch (e) {
-        console.warn('Stream load failed:', e);
+        console.warn('[Player] Stream load failed:', e);
       } finally {
         if (!cancelled) setStreamLoading(false);
       }
@@ -152,10 +160,16 @@ function Player() {
       setSearchingMagnets(true);
       setAddProgress('מחפש מקורות להורדה...');
       try {
+        console.log('[Player] Searching magnets for:', data.title, data.year, data.imdbId, type);
         const magnets = await searchMagnets(data.title, data.year, data.imdbId, type);
-        if (cancelled) return;
+        console.log('[Player] Magnet search returned:', magnets.length, 'results');
+        if (cancelled) {
+          console.log('[Player] Cancelled after magnet search');
+          return;
+        }
 
         if (magnets.length === 0) {
+          console.log('[Player] No magnets found');
           setAddProgress('');
           setSearchingMagnets(false);
           return;
@@ -165,6 +179,7 @@ function Player() {
 
         // Pick best magnet (highest quality with seeds)
         const best = magnets[0];
+        console.log('[Player] Best magnet:', best.quality, best.provider, best.seeds + ' seeds');
         if (!best) {
           setSearchingMagnets(false);
           setAddProgress('');
@@ -172,20 +187,31 @@ function Player() {
         }
 
         // Check quality limit for free users
-        if (!isPremium && best.quality === '4K' || best.quality === '1080p') {
-          // Still add it - we'll filter streams after, but show upgrade message
+        const locked = !isPremium && (best.quality === '4K' || best.quality === '1080p');
+        if (locked) {
+          console.log('[Player] Quality locked for free user:', best.quality);
         }
 
         setAddingMagnet(true);
         setAddProgress(`מוסיף ${best.quality || ''} ל-Real-Debrid...`);
 
-        const debridStreams = await addMagnetToRd(best.magnet, data.title);
-        if (cancelled) return;
+        console.log('[Player] Adding magnet to RD:', best.magnet.substring(0, 60) + '...');
+        const debridStreams = await addMagnetToRd(best.magnet, data.title, (msg) => {
+          console.log('[Player] RD progress:', msg);
+          setAddProgress(msg);
+        });
+        console.log('[Player] RD returned streams:', debridStreams.length);
+        if (cancelled) {
+          console.log('[Player] Cancelled after RD add');
+          return;
+        }
 
         if (debridStreams.length > 0) {
           const filtered = filterStreams(debridStreams);
+          console.log('[Player] Filtered streams:', filtered.length);
           setStreams(prev => [...prev, ...filtered]);
           if (filtered.length > 0) {
+            console.log('[Player] Setting current stream:', filtered[0].url.substring(0, 60));
             setCurrentStream(filtered[0]);
             recordWatch();
           } else {
@@ -197,7 +223,7 @@ function Player() {
         }
       } catch (e) {
         if (!cancelled) {
-          console.warn('Auto-play failed:', e);
+          console.warn('[Player] Auto-play failed:', e);
           setError(e.message || 'ההפעלה האוטומטית נכשלה');
         }
       } finally {
@@ -211,7 +237,7 @@ function Player() {
 
     loadStreams();
     return () => { cancelled = true; };
-  }, [data, id, type, rdConfigured, autoPlayAttempted, watchCheck, filterStreams, recordWatch, isPremium]);
+  }, [data, id, type, rdConfigured, watchCheck, filterStreams, recordWatch, isPremium]);
 
   // Auto-fetch subtitles
   useEffect(() => {
@@ -460,7 +486,10 @@ function Player() {
     setAddProgress('מוסיף מגנט ל-Real-Debrid...');
     setError(null);
     try {
-      const results = await addMagnetToRd(magnet, title);
+      const results = await addMagnetToRd(magnet, title, (msg) => {
+        console.log('[Player] RD progress (manual):', msg);
+        setAddProgress(msg);
+      });
       if (results.length > 0) {
         const filtered = filterStreams(results);
         setStreams(prev => [...prev, ...filtered]);

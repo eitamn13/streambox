@@ -425,29 +425,58 @@ export async function searchYtsMagnets(title, year = '') {
 // ADD MAGNET TO REAL-DEBRID WITH EXTENDED POLLING
 // ============================================================================
 
-export async function addMagnetToRd(magnet, filename = '') {
+export async function addMagnetToRd(magnet, filename = '', onProgress = null) {
+  console.log('[DebridManager] addMagnetToRd called');
   if (!realDebrid.isConfigured()) throw new Error('Real-Debrid לא מחובר');
 
-  const addRes = await realDebrid.rdAddMagnet(magnet);
-  if (!addRes?.id) throw new Error('הוספת המגנט נכשלה');
+  console.log('[DebridManager] Adding magnet to RD...');
+  let addRes;
+  try {
+    addRes = await realDebrid.rdAddMagnet(magnet);
+  } catch (e) {
+    console.error('[DebridManager] rdAddMagnet failed:', e.message);
+    throw new Error('שגיאה בהוספת המגנט: ' + e.message);
+  }
+
+  console.log('[DebridManager] rdAddMagnet response:', addRes);
+  if (!addRes?.id) throw new Error('הוספת המגנט נכשלה (אין ID)');
 
   const torrentId = addRes.id;
+  console.log('[DebridManager] Torrent ID:', torrentId);
 
   // Poll for up to 90 seconds
   for (let i = 0; i < 90; i++) {
     await new Promise(r => setTimeout(r, 1000));
-    const info = await realDebrid.rdGetTorrentInfo(torrentId);
+    const progressMsg = `ממתין ל-Real-Debrid... ${i + 1} שניות`;
+    if (onProgress) onProgress(progressMsg);
+
+    let info;
+    try {
+      info = await realDebrid.rdGetTorrentInfo(torrentId);
+    } catch (e) {
+      console.warn('[DebridManager] rdGetTorrentInfo failed:', e.message);
+      continue;
+    }
+
+    console.log('[DebridManager] Poll', i + 1, '- status:', info?.status, 'links:', info?.links?.length);
 
     if (info?.status === 'waiting_files_selection') {
-      await realDebrid.rdSelectFiles(torrentId, 'all');
+      console.log('[DebridManager] Selecting all files');
+      try {
+        await realDebrid.rdSelectFiles(torrentId, 'all');
+      } catch (e) {
+        console.warn('[DebridManager] rdSelectFiles failed:', e.message);
+      }
     }
 
     if (info?.links?.length > 0 && info.status === 'downloaded') {
+      console.log('[DebridManager] Torrent ready! Links:', info.links.length);
       const results = [];
       for (const link of info.links) {
         try {
           const unrestrict = await realDebrid.rdUnrestrictLink(link);
           if (unrestrict?.download) {
+            console.log('[DebridManager] Unrestricted:', unrestrict.filename);
             results.push({
               url: unrestrict.download,
               title: unrestrict.filename || filename || 'Real-Debrid',
@@ -457,14 +486,23 @@ export async function addMagnetToRd(magnet, filename = '') {
               sourceType: 'debrid',
               info: ['Premium', unrestrict.filename],
             });
+          } else {
+            console.warn('[DebridManager] Unrestrict returned no download URL');
           }
-        } catch { /* ignore */ }
+        } catch (e) {
+          console.warn('[DebridManager] rdUnrestrictLink failed:', e.message);
+        }
       }
+      console.log('[DebridManager] Total streams:', results.length);
       return results;
     }
 
-    if (info?.status === 'error') throw new Error('שגיאה בהורדת הטורנט');
+    if (info?.status === 'error') {
+      console.error('[DebridManager] Torrent error status');
+      throw new Error('שגיאה בהורדת הטורנט');
+    }
   }
 
+  console.error('[DebridManager] Timeout after 90 seconds');
   throw new Error('הטורנט לקח יותר מדי זמן להתחיל. נסה שוב מאוחר יותר.');
 }
