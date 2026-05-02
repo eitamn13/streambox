@@ -42,14 +42,23 @@ async function isAdminUser(supabase, user) {
   if (!user) return false;
   // 1. Check subscriptions table
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('subscriptions')
       .select('is_admin')
       .eq('user_id', user.id)
       .single();
     if (data?.is_admin) return true;
   } catch { /* ignore */ }
-  // 2. Fallback: email contains 'admin'
+  // 2. Check users table as fallback
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    if (data?.is_admin) return true;
+  } catch { /* ignore */ }
+  // 3. Fallback: email contains 'admin'
   return user.email?.includes('admin') || false;
 }
 
