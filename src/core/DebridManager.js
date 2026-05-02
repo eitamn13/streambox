@@ -39,7 +39,7 @@ class DebridService {
     const apiKey = this.getApiKey();
     if (!apiKey) throw new Error('API key not configured');
 
-    const url = `/api/debrid/${this.serviceCode}${endpoint}`;
+    const url = `/api/debrid?service=${this.serviceCode}&path=${encodeURIComponent(endpoint)}`;
     const res = await fetch(url, {
       method: options.method || 'GET',
       headers: { 'Content-Type': 'application/json', 'X-Debrid-Key': apiKey },

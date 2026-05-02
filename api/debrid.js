@@ -1,5 +1,6 @@
 // Debrid API Proxy - Real-Debrid, Premiumize, TorBox
-// ====================================================
+// Endpoint: /api/debrid?service=rd&path=/user
+// =====================================================
 
 const SERVICE_CONFIG = {
   rd: {
@@ -28,12 +29,10 @@ function toFormData(obj) {
 }
 
 async function parseBody(req) {
-  // If Vercel or a framework already parsed the body, use it
   if (req.body && typeof req.body === 'object') {
     return req.body;
   }
 
-  // Manually parse JSON body for POST/PUT/PATCH
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('application/json')) {
     return new Promise((resolve) => {
@@ -62,7 +61,7 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { service } = req.query;
+  const { service, path: targetPath = '/' } = req.query;
   const config = SERVICE_CONFIG[service];
 
   if (!config) {
@@ -77,14 +76,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Build target path from the URL
-    // req.url may be a full URL or just the path; normalize it
-    const urlPath = req.url.startsWith('http')
-      ? new URL(req.url).pathname + new URL(req.url).search
-      : req.url;
-
-    const targetPath = urlPath.replace(new RegExp(`^/api/debrid/${service}`), '');
-    const targetUrl = `${config.baseUrl}${targetPath || ''}`;
+    const targetUrl = `${config.baseUrl}${targetPath}`;
 
     const fetchOptions = {
       method: req.method,
@@ -93,11 +85,11 @@ export default async function handler(req, res) {
       },
     };
 
-    // Handle body
     if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && Object.keys(body).length > 0) {
-      // Remove apiKey from body if present (we use header)
       const bodyData = { ...body };
       delete bodyData.apiKey;
+      delete bodyData.service;
+      delete bodyData.path;
 
       if (config.formBody) {
         fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded';
