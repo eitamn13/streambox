@@ -27,6 +27,32 @@ function toFormData(obj) {
   return params.toString();
 }
 
+async function parseBody(req) {
+  // If Vercel or a framework already parsed the body, use it
+  if (req.body && typeof req.body === 'object') {
+    return req.body;
+  }
+
+  // Manually parse JSON body for POST/PUT/PATCH
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('application/json')) {
+    return new Promise((resolve) => {
+      let data = '';
+      req.on('data', chunk => { data += chunk; });
+      req.on('end', () => {
+        try {
+          resolve(data ? JSON.parse(data) : {});
+        } catch {
+          resolve({});
+        }
+      });
+      req.on('error', () => resolve({}));
+    });
+  }
+
+  return {};
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -43,15 +69,22 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Unknown service' });
   }
 
-  const apiKey = req.headers['x-debrid-key'] || req.body?.apiKey;
+  const body = await parseBody(req);
+  const apiKey = req.headers['x-debrid-key'] || body?.apiKey;
+
   if (!apiKey) {
     return res.status(401).json({ error: 'API key required' });
   }
 
   try {
     // Build target path from the URL
-    const targetPath = req.url.replace(`/api/debrid/${service}`, '');
-    const targetUrl = `${config.baseUrl}${targetPath}`;
+    // req.url may be a full URL or just the path; normalize it
+    const urlPath = req.url.startsWith('http')
+      ? new URL(req.url).pathname + new URL(req.url).search
+      : req.url;
+
+    const targetPath = urlPath.replace(new RegExp(`^/api/debrid/${service}`), '');
+    const targetUrl = `${config.baseUrl}${targetPath || ''}`;
 
     const fetchOptions = {
       method: req.method,
@@ -61,19 +94,17 @@ export default async function handler(req, res) {
     };
 
     // Handle body
-    if (req.method === 'POST' || req.method === 'PUT') {
-      if (req.body && Object.keys(req.body).length > 0) {
-        // Remove apiKey from body if present (we use header)
-        const bodyData = { ...req.body };
-        delete bodyData.apiKey;
+    if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && Object.keys(body).length > 0) {
+      // Remove apiKey from body if present (we use header)
+      const bodyData = { ...body };
+      delete bodyData.apiKey;
 
-        if (config.formBody) {
-          fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-          fetchOptions.body = toFormData(bodyData);
-        } else {
-          fetchOptions.headers['Content-Type'] = 'application/json';
-          fetchOptions.body = JSON.stringify(bodyData);
-        }
+      if (config.formBody) {
+        fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        fetchOptions.body = toFormData(bodyData);
+      } else {
+        fetchOptions.headers['Content-Type'] = 'application/json';
+        fetchOptions.body = JSON.stringify(bodyData);
       }
     }
 
