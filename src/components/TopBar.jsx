@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Search, X, Tv, Crown, User } from 'lucide-react';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
+import { useApp } from '../contexts/AppContext.jsx';
 
 function TopBar() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ function TopBar() {
   const [scrolled, setScrolled] = useState(false);
   const inputRef = useRef(null);
   const { isPremium } = useSubscription();
+  const { isAdmin } = useApp();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -43,6 +45,7 @@ function TopBar() {
     { path: '/discover', label: 'גלה' },
     { path: '/library', label: 'ספרייה' },
     { path: '/subscription', label: 'מנוי' },
+    ...(isAdmin ? [{ path: '/admin', label: 'ניהול' }] : []),
   ];
 
   return (

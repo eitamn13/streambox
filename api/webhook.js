@@ -51,7 +51,19 @@ export default async function handler(req, res) {
       const customerId = session?.customer;
       const subscriptionId = session?.subscription;
 
-      if (userId) {
+      if (userId && subscriptionId) {
+        // Fetch subscription details from Stripe to get current_period_end
+        const stripeSubRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
+          headers: { 'Authorization': `Bearer ${secretKey}` },
+        });
+        let periodEnd = null;
+        if (stripeSubRes.ok) {
+          const stripeSub = await stripeSubRes.json();
+          periodEnd = stripeSub.current_period_end
+            ? new Date(stripeSub.current_period_end * 1000).toISOString()
+            : null;
+        }
+
         const supabase = getSupabase();
         if (supabase) {
           await supabase.from('subscriptions').upsert({
@@ -60,7 +72,7 @@ export default async function handler(req, res) {
             stripe_subscription_id: subscriptionId,
             plan: 'premium',
             status: 'active',
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            current_period_end: periodEnd,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
         }
@@ -74,6 +86,29 @@ export default async function handler(req, res) {
         if (supabase) {
           await supabase.from('subscriptions')
             .update({ status: 'past_due', updated_at: new Date().toISOString() })
+            .eq('stripe_subscription_id', subscriptionId);
+        }
+      }
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data?.object;
+      const subscriptionId = subscription?.id;
+      const status = subscription?.status;
+      const periodEnd = subscription?.current_period_end;
+
+      if (subscriptionId) {
+        const supabase = getSupabase();
+        if (supabase) {
+          const updates = {
+            status: status === 'active' || status === 'trialing' ? 'active' : status,
+            updated_at: new Date().toISOString(),
+          };
+          if (periodEnd) {
+            updates.current_period_end = new Date(periodEnd * 1000).toISOString();
+          }
+          await supabase.from('subscriptions')
+            .update(updates)
             .eq('stripe_subscription_id', subscriptionId);
         }
       }

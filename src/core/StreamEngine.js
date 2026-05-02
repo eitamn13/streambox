@@ -1,12 +1,12 @@
-// Stream Engine - Real-Debrid only
-// =================================
+// Stream Engine — Netflix-style: calls backend for instant streams
+// ================================================================
 
 import { pluginRegistry } from './PluginRegistry.js';
-import { searchRdLibrary } from './DebridManager.js';
+import { supabase } from '../lib/supabase.js';
 
 const TMDB_IMG = 'https://image.tmdb.org/t/p';
 
-function normalizeStream(s, pluginName, _pluginUrl = '') {
+function normalizeStream(s, pluginName) {
   return {
     url: s.url || s.externalUrl || s.streamUrl || s.source,
     title: s.title || s.name || pluginName,
@@ -18,17 +18,44 @@ function normalizeStream(s, pluginName, _pluginUrl = '') {
     behaviorHints: s.behaviorHints || {},
     sourceType: s.sourceType || 'debrid',
     infoHash: s.infoHash || null,
-    magnetUri: s.magnetUri || null,
-    sources: s.sources || null,
   };
 }
 
-export async function fetchStreams(id, type, title = '', _year = '') {
-  // Real-Debrid only: search user's existing library
-  const rdStreams = await searchRdLibrary(title);
-  return rdStreams.map(s => normalizeStream(s, 'Real-Debrid'));
+// NEW: One-click content API — admin-managed Debrid behind the scenes
+export async function fetchStreams(id, type, title = '', year = '', imdbId = '', season = null, episode = null) {
+  // Call our backend content API
+  try {
+    const params = new URLSearchParams();
+    params.set('imdbId', imdbId || '');
+    params.set('type', type === 'tv' ? 'series' : 'movie');
+    if (season) params.set('season', season);
+    if (episode) params.set('episode', episode);
+
+    // Get auth token if logged in
+    let authToken = '';
+    try {
+      const { data } = await supabase.auth.getSession();
+      authToken = data.session?.access_token || '';
+    } catch { /* not logged in */ }
+    const headers = {};
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const res = await fetch(`/api/content?${params.toString()}`, { headers });
+    if (!res.ok) {
+      console.warn('[StreamEngine] Content API failed:', res.status);
+      return [];
+    }
+    const data = await res.json();
+    return (data.streams || []).map(s => normalizeStream(s, 'StreamBox'));
+  } catch (e) {
+    console.warn('[StreamEngine] Content API error:', e);
+    return [];
+  }
 }
 
+// Legacy catalog functions
 export async function fetchCatalog(pluginId, type, catalogId, page = 1) {
   const plugin = pluginRegistry.getPlugins().find(p => p.id === pluginId);
   if (!plugin || !plugin.enabled) return [];

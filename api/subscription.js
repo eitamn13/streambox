@@ -68,7 +68,7 @@ export default async function handler(req, res) {
 
     const plan = sub?.plan || 'free';
     const status = sub?.status || 'active';
-    const isPremium = plan === 'premium' && status === 'active';
+    const isPremium = plan === 'premium' && (status === 'active' || status === 'trialing');
 
     res.status(200).json({
       user_id: user.id,

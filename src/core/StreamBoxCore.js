@@ -77,6 +77,31 @@ export async function unifiedSearch(query) {
   }));
 }
 
+// Season Details (TV Shows)
+// ==========================
+export async function getSeasonDetails(showId, seasonNumber) {
+  try {
+    const data = await tmdbFetch(`/tv/${showId}/season/${seasonNumber}`, { language: 'he-IL' });
+    return {
+      seasonNumber: data.season_number,
+      name: data.name,
+      overview: data.overview,
+      poster: data.poster_path ? `${TMDB_IMG}/w500${data.poster_path}` : null,
+      episodes: (data.episodes || []).map(ep => ({
+        episodeNumber: ep.episode_number,
+        title: ep.name,
+        overview: ep.overview,
+        still: ep.still_path ? `${TMDB_IMG}/w500${ep.still_path}` : null,
+        runtime: ep.runtime,
+        airDate: ep.air_date,
+      })),
+    };
+  } catch (e) {
+    console.warn('Season fetch failed:', e);
+    return null;
+  }
+}
+
 // Content Details
 // ===============
 export async function getContentDetails(id, type) {

@@ -1,18 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getContentDetails } from '../core/StreamBoxCore.js';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { getContentDetails, getSeasonDetails } from '../core/StreamBoxCore.js';
 import { fetchStreams } from '../core/StreamEngine.js';
-import { searchMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/History.js';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import {
-  Play, Star, Clock, Calendar, ExternalLink, Film, Bookmark, BookmarkCheck,
-  MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award, Search, Magnet,
-  AlertCircle, CheckCircle, Crown
+  Play, Star, Clock, Calendar, Film, Bookmark, BookmarkCheck,
+  MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award,
+  Crown, ChevronDown
 } from 'lucide-react';
 
 function Detail() {
   const { type, id } = useParams();
+  const navigate = useNavigate();
   const { isPremium, watchCheck, filterStreams, recordWatch } = useSubscription();
   const [data, setData] = useState(null);
   const [streams, setStreams] = useState([]);
@@ -21,14 +21,10 @@ function Detail() {
   const [inWatchlist, setInWatchlist] = useState(false);
   const [showAllCast, setShowAllCast] = useState(false);
 
-  // Magnet search states
-  const [searchingMagnets, setSearchingMagnets] = useState(false);
-  const [magnetResults, setMagnetResults] = useState([]);
-  const [addingMagnet, setAddingMagnet] = useState(false);
-  const [showMagnetPanel, setShowMagnetPanel] = useState(false);
-  const [manualMagnet, setManualMagnet] = useState('');
-  const [addError, setAddError] = useState(null);
-  const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
+  // TV seasons/episode states
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [seasonData, setSeasonData] = useState(null);
+  const [seasonLoading, setSeasonLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +38,11 @@ function Detail() {
           setData(details);
           setStreams(filterStreams(streamResults));
           setInWatchlist(isInWatchlist(id, type));
+          // Auto-select first real season (skip specials which are season 0)
+          const firstRealSeason = details.seasons?.find(s => s.season_number > 0);
+          if (firstRealSeason) {
+            setSelectedSeason(firstRealSeason.season_number);
+          }
         }
       } catch (_err) {
         console.error('Failed to load details:', _err);
@@ -56,6 +57,25 @@ function Detail() {
     return () => { cancelled = true };
   }, [type, id, filterStreams]);
 
+  // Fetch season episodes when selectedSeason changes
+  useEffect(() => {
+    if (type !== 'tv' || !selectedSeason) return;
+    let cancelled = false;
+    async function load() {
+      setSeasonLoading(true);
+      try {
+        const result = await getSeasonDetails(id, selectedSeason);
+        if (!cancelled) setSeasonData(result);
+      } catch (_err) {
+        console.warn('Failed to load season:', _err);
+      } finally {
+        if (!cancelled) setSeasonLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true };
+  }, [type, id, selectedSeason]);
+
   const toggleWatchlist = () => {
     if (inWatchlist) {
       removeFromWatchlist(id, type);
@@ -65,54 +85,22 @@ function Detail() {
     setInWatchlist(!inWatchlist);
   };
 
-  const handleSearchMagnets = async () => {
-    if (!data?.title) return;
-    setSearchingMagnets(true);
-    setMagnetResults([]);
-    setAddError(null);
-    try {
-      const results = await searchMagnets(data.title, data.year, data.imdbId, type);
-      setMagnetResults(results);
-    } catch (e) {
-      setAddError('חיפוש המקורות נכשל');
-    } finally {
-      setSearchingMagnets(false);
-    }
-  };
-
-  const handleAddMagnet = async (magnet, title) => {
+  const handlePlayMovie = () => {
     const check = watchCheck();
     if (!check.allowed) {
-      setAddError(check.reason);
+      alert(check.reason);
       return;
     }
-
-    setAddingMagnet(true);
-    setAddError(null);
-    try {
-      const results = await addMagnetToRd(magnet, title, (msg) => {
-        console.log('[Detail] RD progress:', msg);
-      });
-      if (results.length > 0) {
-        const filtered = filterStreams(results);
-        setStreams(prev => [...prev, ...filtered]);
-        if (filtered.length > 0) recordWatch();
-        setShowMagnetPanel(false);
-        setMagnetResults([]);
-      } else {
-        setAddError('לא נמצאו קבצים להורדה');
-      }
-    } catch (e) {
-      setAddError(e.message || 'הוספת המגנט נכשלה');
-    } finally {
-      setAddingMagnet(false);
-    }
+    navigate(`/player/movie/${id}`);
   };
 
-  const handleAddManualMagnet = async () => {
-    if (!manualMagnet.trim()) return;
-    await handleAddMagnet(manualMagnet.trim(), data?.title);
-    setManualMagnet('');
+  const handlePlayEpisode = (seasonNum, episodeNum) => {
+    const check = watchCheck();
+    if (!check.allowed) {
+      alert(check.reason);
+      return;
+    }
+    navigate(`/player/tv/${id}/${seasonNum}/${episodeNum}`);
   };
 
   if (loading) {
@@ -137,6 +125,8 @@ function Detail() {
   }
 
   const hasStreams = streams.length > 0;
+  const isTv = type === 'tv';
+  const seasons = data.seasons?.filter(s => s.season_number > 0) || [];
 
   return (
     <div className="page-transition">
@@ -198,7 +188,7 @@ function Detail() {
                   {data.runtime} דק'
                 </span>
               )}
-              <span className="text-sb-gray text-sm">{type === 'tv' ? 'סדרה' : 'סרט'}</span>
+              <span className="text-sb-gray text-sm">{isTv ? 'סדרה' : 'סרט'}</span>
               {data.status && <span className="text-sb-gray text-sm">{data.status}</span>}
             </div>
 
@@ -221,23 +211,24 @@ function Detail() {
             )}
 
             <div className="flex flex-wrap gap-3 mb-8">
-              {hasStreams ? (
-                <Link
-                  to={`/player/${type}/${id}`}
+              {!isTv ? (
+                <button
+                  onClick={handlePlayMovie}
                   className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
                 >
                   <MonitorPlay className="w-5 h-5" />
                   צפה עכשיו
-                </Link>
-              ) : (
-                <button
-                  onClick={() => { setShowMagnetPanel(true); handleSearchMagnets(); }}
-                  disabled={!rdConfigured || searchingMagnets}
-                  className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {searchingMagnets ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                  חפש מקור
                 </button>
+              ) : (
+                seasons.length > 0 && (
+                  <button
+                    onClick={() => handlePlayEpisode(seasons[0].season_number, 1)}
+                    className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
+                  >
+                    <Play className="w-5 h-5" />
+                    נגן פרק 1
+                  </button>
+                )
               )}
               <button
                 onClick={toggleWatchlist}
@@ -258,192 +249,143 @@ function Detail() {
               {data.tagline && <p className="text-sb-gray italic mt-3 text-sm">"{data.tagline}"</p>}
             </div>
 
-            {/* Real-Debrid Streams Section */}
-            <div className="mb-8">
-              <h2 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
-                <MonitorPlay className="w-5 h-5 text-sb-red" />
-                מקורות Real-Debrid
-              </h2>
-
-              {!rdConfigured && (
-                <div className="bg-sb-gold/5 border border-sb-gold/20 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-sb-gold shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sb-light text-sm">Real-Debrid לא מחובר</p>
-                      <Link to="/settings" className="text-sb-red text-sm hover:underline mt-1 inline-block">
-                        התחבר ל-Real-Debrid בהגדרות
-                      </Link>
-                    </div>
+            {/* Seasons & Episodes (TV only) */}
+            {isTv && seasons.length > 0 && (
+              <div className="mb-8">
+                {/* Season Selector */}
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-white font-bold text-lg">עונות</h2>
+                  <div className="relative">
+                    <select
+                      value={selectedSeason}
+                      onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                      className="appearance-none bg-sb-surface border border-sb-border text-white text-sm px-4 py-2 pr-8 rounded-lg cursor-pointer focus:border-sb-red/60 outline-none"
+                    >
+                      {seasons.map(s => (
+                        <option key={s.season_number} value={s.season_number}>
+                          {s.name} ({s.episode_count} פרקים)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-sb-gray absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
-              )}
 
-              {rdConfigured && streamsLoading && (
-                <div className="flex items-center gap-2 text-sb-gray py-4">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  טוען מקורות מ-Real-Debrid...
-                </div>
-              )}
-
-              {rdConfigured && !streamsLoading && !hasStreams && (
-                <div className="bg-sb-card rounded-xl p-4">
-                  <p className="text-sb-gray text-sm">הסרט לא נמצא בספרייה שלך ב-Real-Debrid</p>
-                  <button
-                    onClick={() => { setShowMagnetPanel(true); handleSearchMagnets(); }}
-                    className="flex items-center gap-2 mt-3 text-sm text-sb-red hover:underline"
-                  >
-                    <Search className="w-4 h-4" />
-                    חפש והוסף מקור
-                  </button>
-                </div>
-              )}
-
-              {hasStreams && (
-                <div className="space-y-2">
-                  {streams.map((stream, i) => (
-                    <Link
-                      key={i}
-                      to={`/player/${type}/${id}`}
-                      className="flex items-center gap-3 bg-sb-card hover:bg-sb-surface p-4 rounded-xl transition-colors group"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-sb-red/10 flex items-center justify-center">
-                        <Play className="w-5 h-5 text-sb-red" fill="currentColor" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{stream.title}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sb-green text-xs font-bold">{stream.quality}</span>
-                          <span className="text-sb-gray text-xs">{stream.provider}</span>
-                          {stream.size && <span className="text-sb-gray text-xs">{stream.size}</span>}
-                        </div>
-                      </div>
-                      <ChevronLeft className="w-5 h-5 text-sb-gray group-hover:text-white transition-colors" />
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Magnet Search Panel */}
-            {showMagnetPanel && rdConfigured && (
-              <div className="mb-8 bg-sb-card rounded-2xl border border-sb-border/30 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white font-semibold flex items-center gap-2">
-                    <Magnet className="w-4 h-4 text-sb-red" />
-                    הוספת מקור
-                  </h3>
-                  <button onClick={() => setShowMagnetPanel(false)} className="text-sb-gray hover:text-white">✕</button>
-                </div>
-
-                {/* Manual input */}
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    value={manualMagnet}
-                    onChange={(e) => setManualMagnet(e.target.value)}
-                    placeholder="הדבק קישור מגנט..."
-                    className="flex-1 bg-sb-surface border border-sb-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-sb-gray outline-none focus:border-sb-red/60"
-                  />
-                  <button
-                    onClick={handleAddManualMagnet}
-                    disabled={!manualMagnet.trim() || addingMagnet}
-                    className="bg-sb-red text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                  >
-                    {addingMagnet ? <Loader2 className="w-4 h-4 animate-spin" /> : 'הוסף'}
-                  </button>
-                </div>
-
-                {/* Search Results */}
-                {magnetResults.length > 0 && (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    <p className="text-sb-light text-sm font-medium">תוצאות חיפוש:</p>
-                    {magnetResults.map((m, i) => {
-                      const locked = !isPremium && (m.quality === '4K' || m.quality === '1080p');
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => !locked && handleAddMagnet(m.magnet, m.title)}
-                          disabled={addingMagnet || locked}
-                          className={`w-full text-right rounded-lg p-3 transition-colors disabled:opacity-50 ${
-                            locked ? 'bg-sb-surface/50 border border-sb-purple/20' : 'bg-sb-surface hover:bg-sb-border'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm truncate">{m.title}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className="text-sb-green text-xs font-bold">{m.quality}</span>
-                                <span className="text-sb-gray text-xs">{m.size}</span>
-                                <span className="text-sb-gray text-xs">S: {m.seeds}</span>
-                                <span className="text-sb-gray text-xs">{m.provider}</span>
-                              </div>
+                {/* Episodes Grid */}
+                {seasonLoading ? (
+                  <div className="flex items-center gap-2 text-sb-gray py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    טוען פרקים...
+                  </div>
+                ) : seasonData?.episodes?.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {seasonData.episodes.map((ep) => (
+                      <button
+                        key={ep.episodeNumber}
+                        onClick={() => handlePlayEpisode(selectedSeason, ep.episodeNumber)}
+                        className="flex gap-3 bg-sb-card hover:bg-sb-surface border border-sb-border hover:border-sb-red/30 rounded-xl p-3 text-right transition-all group"
+                      >
+                        <div className="shrink-0 w-28 aspect-video rounded-lg overflow-hidden bg-sb-surface">
+                          {ep.still ? (
+                            <img src={ep.still} alt={ep.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Film className="w-6 h-6 text-sb-gray" />
                             </div>
-                            {locked ? (
-                              <Crown className="w-4 h-4 text-sb-purple shrink-0 mr-2" />
-                            ) : (
-                              <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 text-right">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sb-red text-xs font-bold">E{ep.episodeNumber}</span>
+                            <p className="text-white text-sm font-medium truncate">{ep.title}</p>
+                          </div>
+                          <p className="text-sb-gray text-xs line-clamp-2">{ep.overview || 'אין תקציר'}</p>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            {ep.runtime && (
+                              <span className="text-sb-gray text-xs flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {ep.runtime} דק'
+                              </span>
+                            )}
+                            {ep.airDate && (
+                              <span className="text-sb-gray text-xs">{ep.airDate}</span>
                             )}
                           </div>
-                          {locked && (
-                            <p className="text-sb-purple text-xs mt-1">נדרש מנוי פרימיום לאיכות זו</p>
-                          )}
-                        </button>
-                      );
-                    })}
+                        </div>
+                        <div className="shrink-0 flex items-center">
+                          <div className="w-8 h-8 rounded-full bg-sb-red/10 group-hover:bg-sb-red flex items-center justify-center transition-colors">
+                            <Play className="w-4 h-4 text-sb-red group-hover:text-white transition-colors" />
+                          </div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {searchingMagnets && (
-                  <div className="flex items-center gap-2 text-sb-gray py-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    מחפש מקורות...
-                  </div>
-                )}
-
-                {addError && (
-                  <div className="flex items-center gap-2 text-sb-red text-sm py-2">
-                    <AlertCircle className="w-4 h-4" />
-                    {addError}
-                  </div>
+                ) : (
+                  <p className="text-sb-gray text-sm">אין פרקים זמינים לעונה זו</p>
                 )}
               </div>
             )}
 
             {/* Cast */}
-            {data.cast && data.cast.length > 0 && (
+            {data.cast.length > 0 && (
               <div className="mb-8">
                 <h2 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
                   <Users className="w-5 h-5 text-sb-red" />
                   שחקנים
                 </h2>
-                <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-                  {(showAllCast ? data.cast : data.cast.slice(0, 6)).map((c, i) => (
-                    <div key={i} className="flex-shrink-0 w-[100px]">
-                      <div className="aspect-[3/4] rounded-xl overflow-hidden bg-sb-card mb-2">
-                        {c.photo ? (
-                          <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                  {(showAllCast ? data.cast : data.cast.slice(0, 6)).map((actor) => (
+                    <div key={actor.name} className="shrink-0 text-center w-20">
+                      <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-sb-card mb-1.5 ring-1 ring-white/10">
+                        {actor.photo ? (
+                          <img src={actor.photo} alt={actor.name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-sb-surface">
-                            <span className="text-sb-gray text-xl font-bold">{c.name?.charAt(0)}</span>
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Users className="w-6 h-6 text-sb-gray" />
                           </div>
                         )}
                       </div>
-                      <p className="text-white text-xs font-medium line-clamp-1">{c.name}</p>
-                      <p className="text-sb-gray text-[10px] line-clamp-1">{c.character}</p>
+                      <p className="text-white text-xs font-medium truncate">{actor.name}</p>
+                      <p className="text-sb-gray text-[10px] truncate">{actor.character}</p>
                     </div>
                   ))}
+                  {!showAllCast && data.cast.length > 6 && (
+                    <button
+                      onClick={() => setShowAllCast(true)}
+                      className="shrink-0 w-16 h-16 rounded-full bg-sb-card flex items-center justify-center text-sb-gray hover:text-white transition-colors"
+                    >
+                      +{data.cast.length - 6}
+                    </button>
+                  )}
                 </div>
-                {data.cast.length > 6 && (
-                  <button
-                    onClick={() => setShowAllCast(!showAllCast)}
-                    className="text-sb-red text-sm hover:underline mt-1"
-                  >
-                    {showAllCast ? 'פחות' : 'הצג הכל'}
-                  </button>
-                )}
               </div>
             )}
+
+            {/* Links */}
+            <div className="flex flex-wrap gap-3">
+              {data.imdbId && (
+                <a
+                  href={`https://www.imdb.com/title/${data.imdbId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sb-gold hover:text-sb-gold-hover text-sm transition-colors"
+                >
+                  <Award className="w-4 h-4" />
+                  IMDB
+                </a>
+              )}
+              {data.homepage && (
+                <a
+                  href={data.homepage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sb-blue hover:text-sb-blue-hover text-sm transition-colors"
+                >
+                  <Globe className="w-4 h-4" />
+                  אתר רשמי
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>

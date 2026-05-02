@@ -51,7 +51,7 @@ async function getApiKey(req) {
           .eq('customer_api_key', customerKey)
           .single();
         
-        if (sub && sub.status === 'active') {
+        if (sub && (sub.status === 'active' || sub.status === 'trialing')) {
           // Return admin's debrid key
           const service = req.query.service;
           const envKey = process.env[`ADMIN_${service.toUpperCase()}_API_KEY`];

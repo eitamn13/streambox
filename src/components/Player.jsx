@@ -9,14 +9,14 @@ import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import SubtitleOverlay from './SubtitleOverlay.jsx';
 import {
   ArrowRight, Maximize, Minimize, Volume2, VolumeX, Play, Pause,
-  Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay, Search,
-  Magnet, Film, CheckCircle, AlertCircle, ExternalLink, Crown
+  Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay,
+  AlertCircle, Crown, RefreshCw
 } from 'lucide-react';
 
 let Hls = null;
 
 function Player() {
-  const { type, id } = useParams();
+  const { type, id, season, episode } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const containerRef = useRef(null);
@@ -43,20 +43,23 @@ function Player() {
   const [hlsInstance, setHlsInstance] = useState(null);
   const controlsTimeout = useRef(null);
 
-  // Magnet search states
-  const [searchingMagnets, setSearchingMagnets] = useState(false);
-  const [magnetResults, setMagnetResults] = useState([]);
-  const [addingMagnet, setAddingMagnet] = useState(false);
+  // Auto-play flow states (internal, no UI exposed)
   const [addProgress, setAddProgress] = useState('');
-  const [showMagnetSearch, setShowMagnetSearch] = useState(false);
-  const [manualMagnet, setManualMagnet] = useState('');
   const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
   const autoPlayAttemptedRef = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Auto-subtitle states
   const [autoSubtitles, setAutoSubtitles] = useState([]);
   const [activeSubTrack, setActiveSubTrack] = useState(null);
   const trackRef = useRef(null);
+
+  // Build search title (with SxxExx for TV episodes)
+  const searchTitle = data?.title
+    ? (type === 'tv' && season && episode)
+      ? `${data.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
+      : data.title
+    : '';
 
   // Load content details
   useEffect(() => {
@@ -96,30 +99,18 @@ function Player() {
     return () => clearInterval(interval);
   }, [data, id, type]);
 
-  // Subscription check before loading streams
+  // Auto-play flow
   useEffect(() => {
-    if (!data) return;
-    const check = watchCheck();
-    if (!check.allowed) {
-      setError(check.reason);
-      return;
-    }
-  }, [data, watchCheck]);
-
-  // Load streams + auto-play flow
-  useEffect(() => {
-    if (!data) return;
+    if (!data || !searchTitle) return;
     let cancelled = false;
-    console.log('[Player] loadStreams effect started for', data.title);
 
     async function loadStreams() {
       setStreamLoading(true);
       setError(null);
+      setAddProgress('בודק מנוי...');
 
       try {
-        // 1. Check subscription
         const check = watchCheck();
-        console.log('[Player] Subscription check:', check);
         if (!check.allowed) {
           if (!cancelled) {
             setError(check.reason);
@@ -128,105 +119,71 @@ function Player() {
           return;
         }
 
-        // 2. Search existing RD library
-        console.log('[Player] Searching RD library...');
-        const results = await fetchStreams(id, type, data.title, data.year);
-        console.log('[Player] RD library results:', results.length);
+        setAddProgress('מחפש בספרייה...');
+        const results = await fetchStreams(id, type, data.title, data.year, data.imdbId, season || null, episode || null);
         const filtered = filterStreams(results);
 
         if (!cancelled) {
           setStreams(filtered);
           if (filtered.length > 0) {
-            console.log('[Player] Found streams in RD library, playing');
             setCurrentStream(filtered[0]);
             recordWatch();
+            setAddProgress('');
           } else if (rdConfigured && !autoPlayAttemptedRef.current) {
-            // 3. Auto-search magnets if nothing in library
             autoPlayAttemptedRef.current = true;
-            console.log('[Player] No library streams, starting auto-search');
             await autoSearchAndPlay();
+          } else if (!rdConfigured) {
+            setError('Real-Debrid לא מחובר. פנה למנהל המערכת.');
           } else {
-            console.log('[Player] No library streams, auto-play already attempted or RD not configured');
+            setError('לא נמצאו מקורות לצפייה');
           }
         }
       } catch (e) {
         console.warn('[Player] Stream load failed:', e);
+        if (!cancelled) setError('טעינת התוכן נכשלה');
       } finally {
         if (!cancelled) setStreamLoading(false);
       }
     }
 
     async function autoSearchAndPlay() {
-      setSearchingMagnets(true);
-      setAddProgress('מחפש מקורות להורדה...');
+      setAddProgress('מחפש מקורות ברשת...');
       try {
-        console.log('[Player] Searching magnets for:', data.title, data.year, data.imdbId, type);
-        const magnets = await searchMagnets(data.title, data.year, data.imdbId, type);
-        console.log('[Player] Magnet search returned:', magnets.length, 'results');
-        if (cancelled) {
-          console.log('[Player] Cancelled after magnet search');
-          return;
-        }
+        const magnets = await searchMagnets(searchTitle, data.year, data.imdbId, type);
+        if (cancelled) return;
 
         if (magnets.length === 0) {
-          console.log('[Player] No magnets found');
           setAddProgress('');
-          setSearchingMagnets(false);
+          setError('לא נמצאו מקורות להורדה');
           return;
         }
 
-        setMagnetResults(magnets);
-        setShowMagnetSearch(true);
-
-        // For free users, try to find a magnet within plan limits
-        const allowedQualities = isPremium ? ['4K', '2160p', '1080p', '720p', '480p', 'auto']
+        const allowedQualities = isPremium
+          ? ['4K', '2160p', '1080p', '720p', '480p', 'auto']
           : ['720p', '480p', 'auto'];
         const best = magnets.find(m => allowedQualities.includes(m.quality)) || magnets[0];
 
-        console.log('[Player] Selected magnet:', best.quality, best.provider, best.seeds + ' seeds');
-        if (!best) {
-          setSearchingMagnets(false);
-          setAddProgress('');
-          return;
-        }
-
-        // Check if this quality is allowed for the user's plan
         const locked = !isPremium && (best.quality === '4K' || best.quality === '1080p');
         if (locked) {
-          console.log('[Player] Best available magnet is locked for free user:', best.quality);
-          setError('האיכות הזו דורשת מנוי פרימיום. בחר איכות אחרת או שדרג.');
-          setSearchingMagnets(false);
-          setAddingMagnet(false);
+          setError('האיכות הזו דורשת מנוי פרימיום');
           setAddProgress('');
-          return; // Keep magnet panel open so user can choose
-        }
-
-        setAddingMagnet(true);
-        setAddProgress(`מוסיף ${best.quality || ''} ל-Real-Debrid...`);
-
-        console.log('[Player] Adding magnet to RD:', best.magnet.substring(0, 60) + '...');
-        const debridStreams = await addMagnetToRd(best.magnet, data.title, (msg) => {
-          console.log('[Player] RD progress:', msg);
-          setAddProgress(msg);
-        });
-        console.log('[Player] RD returned streams:', debridStreams.length);
-        if (cancelled) {
-          console.log('[Player] Cancelled after RD add');
           return;
         }
+
+        setAddProgress(`מוסיף ${best.quality || ''} לשרת...`);
+        const debridStreams = await addMagnetToRd(best.magnet, searchTitle, (msg) => {
+          setAddProgress(msg);
+        });
+
+        if (cancelled) return;
 
         if (debridStreams.length > 0) {
           const filtered = filterStreams(debridStreams);
-          console.log('[Player] Filtered streams:', filtered.length);
           setStreams(prev => [...prev, ...filtered]);
           if (filtered.length > 0) {
-            console.log('[Player] Setting current stream:', filtered[0].url.substring(0, 60));
             setCurrentStream(filtered[0]);
             recordWatch();
-            setShowMagnetSearch(false);
-            setMagnetResults([]);
           } else {
-            // This shouldn't happen if we picked the right magnet, but just in case
             setError('האיכות הזו דורשת מנוי פרימיום');
           }
         } else {
@@ -238,17 +195,13 @@ function Player() {
           setError(e.message || 'ההפעלה האוטומטית נכשלה');
         }
       } finally {
-        if (!cancelled) {
-          setSearchingMagnets(false);
-          setAddingMagnet(false);
-          setAddProgress('');
-        }
+        if (!cancelled) setAddProgress('');
       }
     }
 
     loadStreams();
     return () => { cancelled = true; };
-  }, [data, id, type, rdConfigured, watchCheck, filterStreams, recordWatch, isPremium]);
+  }, [data, id, type, searchTitle, rdConfigured, watchCheck, filterStreams, recordWatch, isPremium, retryCount]);
 
   // Auto-fetch subtitles
   useEffect(() => {
@@ -259,12 +212,11 @@ function Player() {
       try {
         const results = await fetchSubtitles({
           imdb_id: data.imdbId,
-          query: data.title,
+          query: searchTitle || data.title,
           lang: 'heb,eng',
         });
         if (cancelled) return;
 
-        // Prefer Hebrew, fallback to English
         const hebrew = results.find(s => s.lang === 'heb' || s.lang === 'he');
         const english = results.find(s => s.lang === 'eng' || s.lang === 'en');
         const best = hebrew || english;
@@ -281,11 +233,10 @@ function Player() {
 
     loadSubs();
     return () => { cancelled = true; };
-  }, [data]);
+  }, [data, searchTitle]);
 
   const applySubtitleTrack = async (sub) => {
     if (!videoRef.current) return;
-    // Remove old track
     if (trackRef.current) {
       videoRef.current.removeChild(trackRef.current);
       trackRef.current = null;
@@ -307,7 +258,6 @@ function Player() {
     setActiveSubTrack(sub);
   };
 
-  // Cleanup subtitle track on unmount
   useEffect(() => {
     return () => {
       if (trackRef.current && videoRef.current) {
@@ -466,69 +416,10 @@ function Player() {
     setError(null);
   };
 
-  // Magnet search handlers
-  const handleSearchMagnets = async () => {
-    if (!data?.title) return;
-    setSearchingMagnets(true);
-    setMagnetResults([]);
+  const handleRetry = () => {
+    autoPlayAttemptedRef.current = false;
+    setRetryCount(c => c + 1);
     setError(null);
-    try {
-      const results = await searchMagnets(data.title, data.year, data.imdbId, type);
-      setMagnetResults(results);
-      if (results.length === 0) {
-        setError('לא נמצאו מקורות להורדה');
-      }
-    } catch (_err) {
-      setError('חיפוש המקורות נכשל');
-    } finally {
-      setSearchingMagnets(false);
-    }
-  };
-
-  const handleAddMagnet = async (magnet, title, quality) => {
-    // Check subscription limits before adding
-    const check = watchCheck();
-    if (!check.allowed) {
-      setError(check.reason);
-      return;
-    }
-
-    setAddingMagnet(true);
-    setAddProgress('מוסיף מגנט ל-Real-Debrid...');
-    setError(null);
-    try {
-      const results = await addMagnetToRd(magnet, title, (msg) => {
-        console.log('[Player] RD progress (manual):', msg);
-        setAddProgress(msg);
-      });
-      if (results.length > 0) {
-        const filtered = filterStreams(results);
-        setStreams(prev => [...prev, ...filtered]);
-        if (filtered.length > 0) {
-          setCurrentStream(filtered[0]);
-          recordWatch();
-          setShowMagnetSearch(false);
-          setMagnetResults([]);
-        } else {
-          setError('האיכות הזו דורשת מנוי פרימיום. בחר מקור אחר או שדרג.');
-          // Keep search panel open so user can pick another
-        }
-        setAddProgress('');
-      } else {
-        setError('לא נמצאו קבצים להורדה');
-      }
-    } catch (e) {
-      setError(e.message || 'הוספת המגנט נכשלה');
-    } finally {
-      setAddingMagnet(false);
-      setAddProgress('');
-    }
-  };
-
-  const handleAddManualMagnet = async () => {
-    if (!manualMagnet.trim()) return;
-    await handleAddMagnet(manualMagnet.trim(), data?.title);
-    setManualMagnet('');
   };
 
   if (loading) {
@@ -541,7 +432,7 @@ function Player() {
 
   const isDirectStream = currentStream && (currentStream.type === 'direct' || currentStream.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
   const hasStreams = streams.length > 0;
-  const isBusy = searchingMagnets || addingMagnet || streamLoading;
+  const isBusy = streamLoading || addProgress;
 
   return (
     <div ref={containerRef} className={`bg-black flex flex-col ${fullscreen ? 'fixed inset-0 z-[100]' : 'min-h-screen'}`}>
@@ -551,7 +442,9 @@ function Player() {
           <ArrowRight className="w-5 h-5" />
           <span className="text-sm font-medium hidden sm:inline">חזרה</span>
         </button>
-        <h1 className="text-white font-semibold truncate max-w-[50vw] sm:max-w-md text-sm sm:text-base">{data?.title}</h1>
+        <h1 className="text-white font-semibold truncate max-w-[50vw] sm:max-w-md text-sm sm:text-base">
+          {data?.title}{type === 'tv' && season && episode ? ` S${season}E${episode}` : ''}
+        </h1>
         <div className="w-16" />
       </div>
 
@@ -559,10 +452,7 @@ function Player() {
       <div
         className="flex-1 relative bg-black flex items-center justify-center"
         onMouseMove={resetControlsTimeout}
-        onClick={() => {
-          togglePlay();
-          resetControlsTimeout();
-        }}
+        onClick={() => { togglePlay(); resetControlsTimeout(); }}
       >
         {isDirectStream ? (
           <video
@@ -576,23 +466,16 @@ function Player() {
         ) : (
           <div className="text-center p-8 max-w-lg">
             <MonitorPlay className="w-16 h-16 text-sb-gray mx-auto mb-4" />
-            <h2 className="text-xl text-white mb-2">נגן וידאו</h2>
-
-            {!rdConfigured && (
-              <div className="bg-sb-gold/10 border border-sb-gold/20 rounded-xl p-4 mb-4">
-                <p className="text-sb-gold text-sm">Real-Debrid לא מחובר</p>
-                <Link to="/settings" className="text-sb-red text-sm hover:underline mt-2 inline-block">
-                  התחבר בהגדרות
-                </Link>
-              </div>
+            <h2 className="text-xl text-white mb-2">{data?.title}</h2>
+            {type === 'tv' && season && episode && (
+              <p className="text-sb-gray mb-4">עונה {season} פרק {episode}</p>
             )}
 
-            {/* Subscription upgrade prompt for free users */}
-            {!isPremium && rdConfigured && (
+            {!isPremium && (
               <div className="bg-sb-purple/10 border border-sb-purple/20 rounded-xl p-3 mb-4">
-                <div className="flex items-center gap-2 text-sb-purple text-sm">
+                <div className="flex items-center justify-center gap-2 text-sb-purple text-sm">
                   <Crown className="w-4 h-4" />
-                  <span>מנוי חינם - {planInfo.limits.maxMoviesDaily} סרטים ביום, עד {planInfo.limits.maxQuality}</span>
+                  <span>מנוי חינם - {planInfo?.limits?.maxMoviesDaily || 3} סרטים ביום, עד {planInfo?.limits?.maxQuality || '720p'}</span>
                 </div>
               </div>
             )}
@@ -600,124 +483,17 @@ function Player() {
             {isBusy && (
               <div className="flex flex-col items-center gap-3 py-6">
                 <Loader2 className="w-8 h-8 text-sb-red animate-spin" />
-                <p className="text-sb-gray text-sm">{addProgress || 'מחפש מקורות...'}</p>
-                {/* Progress dots for magnet search */}
-                {searchingMagnets && (
-                  <div className="flex gap-1">
-                    {[0,1,2].map(i => (
-                      <div key={i} className="w-2 h-2 rounded-full bg-sb-red animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
-                    ))}
-                  </div>
-                )}
+                <p className="text-sb-gray text-sm">{addProgress || 'טוען...'}</p>
+                <div className="flex gap-1">
+                  {[0,1,2].map(i => (
+                    <div key={i} className="w-2 h-2 rounded-full bg-sb-red animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                  ))}
+                </div>
               </div>
             )}
 
-            {rdConfigured && !isBusy && !hasStreams && (
-              <div className="space-y-4">
-                <p className="text-sb-gray">הסרט לא נמצא בספרייה שלך ב-Real-Debrid</p>
-
-                {!showMagnetSearch ? (
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleSearchMagnets(); setShowMagnetSearch(true); }}
-                      disabled={searchingMagnets}
-                      className="flex items-center justify-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-colors disabled:opacity-50"
-                    >
-                      {searchingMagnets ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                      חפש מקור
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowMagnetSearch(true); }}
-                      className="flex items-center justify-center gap-2 bg-sb-surface hover:bg-sb-border text-sb-light px-6 py-3 rounded-xl font-medium transition-colors"
-                    >
-                      <Magnet className="w-4 h-4" />
-                      הדבק מגנט ידנית
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-sb-card rounded-xl p-4 text-left space-y-3" onClick={(e) => e.stopPropagation()}>
-                    {/* Manual magnet input */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={manualMagnet}
-                        onChange={(e) => setManualMagnet(e.target.value)}
-                        placeholder="הדבק קישור מגנט..."
-                        className="flex-1 bg-sb-surface border border-sb-border rounded-lg px-3 py-2 text-sm text-white placeholder-sb-gray outline-none focus:border-sb-red/60"
-                      />
-                      <button
-                        onClick={handleAddManualMagnet}
-                        disabled={!manualMagnet.trim() || addingMagnet}
-                        className="bg-sb-red text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                      >
-                        {addingMagnet ? <Loader2 className="w-4 h-4 animate-spin" /> : 'הוסף'}
-                      </button>
-                    </div>
-
-                    {/* Search Results */}
-                    {magnetResults.length > 0 && (
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        <p className="text-white text-sm font-medium">תוצאות חיפוש:</p>
-                        {magnetResults.map((m, i) => {
-                          const isPremiumQuality = m.quality === '4K' || m.quality === '1080p';
-                          const locked = !isPremium && isPremiumQuality;
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => !locked && handleAddMagnet(m.magnet, m.title, m.quality)}
-                              disabled={addingMagnet || locked}
-                              className={`w-full text-right rounded-lg p-3 transition-colors disabled:opacity-50 ${
-                                locked ? 'bg-sb-surface/50 border border-sb-purple/20' : 'bg-sb-surface hover:bg-sb-border'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white text-sm truncate">{m.title}</p>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <span className="text-sb-green text-xs font-bold">{m.quality}</span>
-                                    <span className="text-sb-gray text-xs">{m.size}</span>
-                                    <span className="text-sb-gray text-xs">S: {m.seeds}</span>
-                                    <span className="text-sb-gray text-xs">{m.provider}</span>
-                                  </div>
-                                </div>
-                                {locked ? (
-                                  <Crown className="w-4 h-4 text-sb-purple shrink-0 mr-2" />
-                                ) : (
-                                  <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
-                                )}
-                              </div>
-                              {locked && (
-                                <p className="text-sb-purple text-xs mt-1">נדרש מנוי פרימיום לאיכות זו</p>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {searchingMagnets && (
-                      <div className="flex items-center gap-2 text-sb-gray py-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        מחפש מקורות...
-                      </div>
-                    )}
-
-                    {addProgress && (
-                      <div className="flex items-center gap-2 text-sb-blue py-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {addProgress}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => { setShowMagnetSearch(false); setMagnetResults([]); setError(null); }}
-                      className="text-sb-gray text-xs hover:text-white"
-                    >
-                      סגור
-                    </button>
-                  </div>
-                )}
-              </div>
+            {!isBusy && !hasStreams && !error && (
+              <p className="text-sb-gray">מכין את התוכן...</p>
             )}
           </div>
         )}
@@ -734,7 +510,7 @@ function Player() {
           </div>
         )}
 
-        {/* Error */}
+        {/* Error Overlay */}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60" onClick={(e) => e.stopPropagation()}>
             <div className="bg-sb-card rounded-xl p-6 text-center max-w-sm mx-4">
@@ -750,10 +526,11 @@ function Player() {
                 </button>
               )}
               <button
-                onClick={() => setError(null)}
-                className="block mx-auto mt-3 text-sb-light text-sm hover:text-white"
+                onClick={handleRetry}
+                className="mt-3 flex items-center justify-center gap-2 mx-auto text-sb-light text-sm hover:text-white"
               >
-                סגור
+                <RefreshCw className="w-4 h-4" />
+                נסה שוב
               </button>
             </div>
           </div>
@@ -766,7 +543,7 @@ function Player() {
               id={id}
               type={type}
               imdbId={data?.imdbId}
-              title={data?.title}
+              title={searchTitle || data?.title}
               videoRef={videoRef}
               onClose={() => setShowSubtitles(false)}
               preloadedSubs={autoSubtitles}
@@ -868,21 +645,9 @@ function Player() {
                   {currentStream?.title?.slice(0, 15) || 'מקור'}
                 </button>
               )}
-
-              {rdConfigured && !hasStreams && !streamLoading && !isBusy && (
-                <button
-                  onClick={() => { handleSearchMagnets(); setShowMagnetSearch(true); resetControlsTimeout(); }}
-                  disabled={searchingMagnets}
-                  className="flex items-center gap-1.5 text-xs text-white bg-sb-red hover:bg-sb-red-hover px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {searchingMagnets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                  חפש מקור
-                </button>
-              )}
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
-              {/* Active subtitle indicator */}
               {activeSubTrack && (
                 <span className="text-xs text-sb-green hidden sm:inline">
                   {LANGUAGE_NAMES[activeSubTrack.lang] || activeSubTrack.lang}

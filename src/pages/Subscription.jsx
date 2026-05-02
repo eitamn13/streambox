@@ -5,7 +5,7 @@ import { useApp } from '../contexts/AppContext.jsx';
 import { PLANS } from '../core/SubscriptionManager.js';
 import {
   Check, Crown, Zap, ArrowLeft, Loader2, AlertCircle,
-  Tv, Film, Monitor, MessageCircle
+  Tv, Film, Monitor, MessageCircle, Gift
 } from 'lucide-react';
 
 export default function Subscription() {
@@ -61,6 +61,24 @@ export default function Subscription() {
             )}
           </p>
         </div>
+
+        {/* Trial Banner */}
+        {!isPremium && (
+          <div className="bg-gradient-to-r from-sb-purple/20 to-sb-blue/20 border border-sb-purple/30 rounded-2xl p-6 mb-8">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-sb-purple/20 flex items-center justify-center shrink-0">
+                <Gift className="w-6 h-6 text-sb-purple" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-lg mb-1">7 ימי ניסיון בחינם!</h3>
+                <p className="text-sb-light text-sm">
+                  התחל את המנוי הפרימיום וקבל <strong>7 ימי ניסיון ללא תשלום</strong>.
+                  ביטול בכל עת — ללא שאלות. לאחר הניסיון: {premiumPlan.price} ₪ / חודש בלבד.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 flex items-center gap-2 text-red-400 text-sm">
@@ -137,10 +155,15 @@ export default function Subscription() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  שדרג עכשיו
+                  התחל ניסיון חינם
                 </>
               )}
             </button>
+            {!isPremium && premiumPlan.stripePriceId && (
+              <p className="text-center text-sb-gray text-xs mt-2">
+                7 ימי ניסיון חינם, לאחר מכן {premiumPlan.price} ₪/חודש
+              </p>
+            )}
           </div>
         </div>
 

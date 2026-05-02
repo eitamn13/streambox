@@ -82,7 +82,7 @@ export default function Profile() {
             {isPremium ? (
               <span className="inline-flex items-center gap-1 bg-sb-purple/20 text-sb-purple text-xs font-bold px-3 py-1 rounded-full">
                 <Crown className="w-3 h-3" />
-                פרימיום
+                {subscription?.status === 'trialing' ? 'ניסיון' : 'פרימיום'}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 bg-sb-surface text-sb-gray text-xs px-3 py-1 rounded-full">
@@ -116,13 +116,15 @@ export default function Profile() {
             </div>
             <div className="flex justify-between">
               <span className="text-sb-gray">סטטוס</span>
-              <span className={subscription?.status === 'active' ? 'text-sb-green' : 'text-sb-gray'}>
-                {subscription?.status === 'active' ? 'פעיל' : subscription?.status || 'פעיל'}
+              <span className={subscription?.status === 'active' || subscription?.status === 'trialing' ? 'text-sb-green' : 'text-sb-gray'}>
+                {subscription?.status === 'active' ? 'פעיל' : subscription?.status === 'trialing' ? 'בניסיון' : subscription?.status || 'פעיל'}
               </span>
             </div>
             {subscription?.current_period_end && (
               <div className="flex justify-between">
-                <span className="text-sb-gray">תקף עד</span>
+                <span className="text-sb-gray">
+                  {subscription?.status === 'trialing' ? 'ניסיון מסתיים' : 'תקף עד'}
+                </span>
                 <span className="text-white">
                   {new Date(subscription.current_period_end).toLocaleDateString('he-IL')}
                 </span>
