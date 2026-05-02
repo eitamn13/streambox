@@ -33,19 +33,11 @@ function getSupabase() {
   }
 }
 
-async function parseBody(req) {
-  return new Promise((resolve) => {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try { resolve(JSON.parse(body)); } catch { resolve({}); }
-    });
-    req.on('error', () => resolve({}));
-  });
-}
-
+// Get API key from headers or body
+// NOTE: Vercel parses req.body automatically for JSON/URL-encoded requests
 async function getApiKey(req) {
-  const body = await parseBody(req);
+  // In Vercel, req.body is already parsed. Use it directly.
+  const body = req.body || {};
   
   // 1. SaaS mode: Customer API key → admin-managed debrid key
   const customerKey = req.headers['x-customer-key'] || body?.customerKey;
@@ -60,18 +52,6 @@ async function getApiKey(req) {
           .single();
         
         if (sub && sub.status === 'active') {
-          // Check concurrent streams
-          const { data: sessions } = await supabase
-            .from('active_sessions')
-            .select('*')
-            .eq('user_id', sub.user_id)
-            .gte('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
-          
-          const maxConcurrent = sub.plan === 'premium' ? 2 : 1;
-          if (sessions && sessions.length >= maxConcurrent) {
-            // Still allow but could throttle here
-          }
-          
           // Return admin's debrid key
           const service = req.query.service;
           const envKey = process.env[`ADMIN_${service.toUpperCase()}_API_KEY`];
@@ -81,7 +61,7 @@ async function getApiKey(req) {
             await supabase.rpc('increment_usage', {
               p_user_id: sub.user_id,
               p_date: today,
-            });
+            }).catch(() => {});
             return { apiKey: envKey, plan: sub.plan, userId: sub.user_id };
           }
         }
@@ -129,8 +109,7 @@ export default async function handler(req, res) {
       headers: { ...config.authHeader(keyInfo.apiKey) },
     };
 
-    // Re-parse body for the actual request (since getApiKey already consumed it)
-    // For Vercel, req body is already parsed if content-type is application/json
+    // Vercel already parses req.body for JSON and form requests
     const bodyData = req.body || {};
     
     // Don't forward our internal fields to the debrid API
@@ -153,11 +132,22 @@ export default async function handler(req, res) {
     const response = await fetch(url, fetchOptions);
     const contentType = response.headers.get('content-type') || '';
     
+    // Handle empty responses (e.g., 204 No Content)
+    const bodyText = await response.text();
     let data;
-    if (contentType.includes('application/json')) {
-      data = await response.json();
+    
+    if (!bodyText || bodyText.trim().length === 0) {
+      // Empty body — common for 204 responses
+      data = null;
+    } else if (contentType.includes('application/json')) {
+      try {
+        data = JSON.parse(bodyText);
+      } catch {
+        // Not valid JSON despite content-type
+        data = bodyText;
+      }
     } else {
-      data = await response.text();
+      data = bodyText;
     }
 
     res.status(200).json({

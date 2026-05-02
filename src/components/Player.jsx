@@ -176,20 +176,29 @@ function Player() {
         }
 
         setMagnetResults(magnets);
+        setShowMagnetSearch(true);
 
-        // Pick best magnet (highest quality with seeds)
-        const best = magnets[0];
-        console.log('[Player] Best magnet:', best.quality, best.provider, best.seeds + ' seeds');
+        // For free users, try to find a magnet within plan limits
+        const allowedQualities = isPremium ? ['4K', '2160p', '1080p', '720p', '480p', 'auto']
+          : ['720p', '480p', 'auto'];
+        const best = magnets.find(m => allowedQualities.includes(m.quality)) || magnets[0];
+
+        console.log('[Player] Selected magnet:', best.quality, best.provider, best.seeds + ' seeds');
         if (!best) {
           setSearchingMagnets(false);
           setAddProgress('');
           return;
         }
 
-        // Check quality limit for free users
+        // Check if this quality is allowed for the user's plan
         const locked = !isPremium && (best.quality === '4K' || best.quality === '1080p');
         if (locked) {
-          console.log('[Player] Quality locked for free user:', best.quality);
+          console.log('[Player] Best available magnet is locked for free user:', best.quality);
+          setError('האיכות הזו דורשת מנוי פרימיום. בחר איכות אחרת או שדרג.');
+          setSearchingMagnets(false);
+          setAddingMagnet(false);
+          setAddProgress('');
+          return; // Keep magnet panel open so user can choose
         }
 
         setAddingMagnet(true);
@@ -214,10 +223,12 @@ function Player() {
             console.log('[Player] Setting current stream:', filtered[0].url.substring(0, 60));
             setCurrentStream(filtered[0]);
             recordWatch();
+            setShowMagnetSearch(false);
+            setMagnetResults([]);
           } else {
+            // This shouldn't happen if we picked the right magnet, but just in case
             setError('האיכות הזו דורשת מנוי פרימיום');
           }
-          setShowMagnetSearch(false);
         } else {
           setError('לא נמצאו קבצים להורדה');
         }
@@ -496,11 +507,12 @@ function Player() {
         if (filtered.length > 0) {
           setCurrentStream(filtered[0]);
           recordWatch();
+          setShowMagnetSearch(false);
+          setMagnetResults([]);
         } else {
-          setError('האיכות הזו דורשת מנוי פרימיום');
+          setError('האיכות הזו דורשת מנוי פרימיום. בחר מקור אחר או שדרג.');
+          // Keep search panel open so user can pick another
         }
-        setShowMagnetSearch(false);
-        setMagnetResults([]);
         setAddProgress('');
       } else {
         setError('לא נמצאו קבצים להורדה');
