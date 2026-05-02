@@ -20,13 +20,22 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('[Login] Attempting login for:', email);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('[Login] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
     setLoading(false);
     if (error) {
+      console.error('[Login] Error:', error.message);
       setError(error.message);
     } else {
+      console.log('[Login] Success, token:', data.session?.access_token);
       setSession(data.session);
-      if (data.session?.access_token) setAuthToken(data.session.access_token);
+      if (data.session?.access_token) {
+        setAuthToken(data.session.access_token);
+        console.log('[Login] Token saved, sb-token:', localStorage.getItem('sb-token'));
+      } else {
+        console.warn('[Login] No access_token in session!');
+      }
       navigate(redirectTo);
     }
   };

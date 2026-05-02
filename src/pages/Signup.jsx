@@ -26,17 +26,26 @@ export default function Signup() {
       return;
     }
     setLoading(true);
+    console.log('[Signup] Attempting signup for:', email);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
     });
+    console.log('[Signup] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
     setLoading(false);
     if (error) {
+      console.error('[Signup] Error:', error.message);
       setError(error.message);
     } else {
+      console.log('[Signup] Success, token:', data.session?.access_token);
       setSession(data.session);
-      if (data.session?.access_token) setAuthToken(data.session.access_token);
+      if (data.session?.access_token) {
+        setAuthToken(data.session.access_token);
+        console.log('[Signup] Token saved, sb-token:', localStorage.getItem('sb-token'));
+      } else {
+        console.warn('[Signup] No access_token in session!');
+      }
       navigate(redirectTo);
     }
   };
