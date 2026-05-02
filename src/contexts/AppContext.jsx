@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, setAuthToken } from '../lib/supabase';
 
 const AppContext = createContext(null);
 
@@ -53,10 +53,15 @@ export function AppProvider({ children }) {
       setSession(data.session);
       setLoading(false);
       if (data.session?.user?.email?.includes('admin')) setIsAdmin(true);
+      // Sync token to localStorage for API calls
+      if (data.session?.access_token) setAuthToken(data.session.access_token);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setIsAdmin(newSession?.user?.email?.includes('admin') || false);
+      // Sync token to localStorage for API calls
+      if (newSession?.access_token) setAuthToken(newSession.access_token);
+      else if (!newSession) setAuthToken(null);
     });
     return () => listener?.subscription?.unsubscribe();
   }, []);
