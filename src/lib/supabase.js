@@ -23,7 +23,10 @@ function createMockClient() {
         const users = JSON.parse(localStorage.getItem('sb-users') || '[]');
         const user = users.find((u) => u.email === email && u.password === password);
         if (!user) return { data: null, error: { message: 'Invalid credentials' } };
-        const session = { user: { id: user.id, email: user.email, user_metadata: user.user_metadata } };
+        const session = {
+          access_token: `mock_${user.id}_${Date.now()}`,
+          user: { id: user.id, email: user.email, user_metadata: user.user_metadata }
+        };
         localStorage.setItem('sb-session', JSON.stringify(session));
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
@@ -42,7 +45,10 @@ function createMockClient() {
         };
         users.push(newUser);
         localStorage.setItem('sb-users', JSON.stringify(users));
-        const session = { user: { id: newUser.id, email: newUser.email, user_metadata: newUser.user_metadata } };
+        const session = {
+          access_token: `mock_${newUser.id}_${Date.now()}`,
+          user: { id: newUser.id, email: newUser.email, user_metadata: newUser.user_metadata }
+        };
         localStorage.setItem('sb-session', JSON.stringify(session));
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
@@ -63,7 +69,7 @@ function createMockClient() {
           localStorage.setItem('sb-session', JSON.stringify(session));
           notify('USER_UPDATED', session);
         }
-        return { data: { user: session?.user || null }, error: null };
+        return { data: { user: session?.user || null, session }, error: null };
       },
       onAuthStateChange: (callback) => {
         const key = 'AUTH_STATE_CHANGE';

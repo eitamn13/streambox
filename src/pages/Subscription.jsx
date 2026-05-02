@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 export default function Subscription() {
-  const { isPremium, isTrialing, plan, checkout, loading } = useSubscription();
+  const { subscription, isPremium, isTrialing, plan, checkout, loading } = useSubscription();
   const { session } = useApp();
   const navigate = useNavigate();
   const [checkingOut, setCheckingOut] = useState(false);
@@ -51,7 +51,12 @@ export default function Subscription() {
             <h2 className="text-white font-semibold">המנוי שלך</h2>
           </div>
           <p className="text-sb-gray text-sm">
-            {isTrialing ? (
+            {subscription?.is_admin ? (
+              <span className="text-sb-gold flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                מנהל מערכת - פרימיום אוניברסלי
+              </span>
+            ) : isTrialing ? (
               <span className="text-sb-blue flex items-center gap-2">
                 <Gift className="w-4 h-4" />
                 בתקופת ניסיון חינם
@@ -68,7 +73,7 @@ export default function Subscription() {
         </div>
 
         {/* Trial Banner */}
-        {!isActive && (
+        {!isActive && !subscription?.is_admin && (
           <div className="bg-gradient-to-r from-sb-purple/20 to-sb-blue/20 border border-sb-purple/30 rounded-2xl p-6 mb-8">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-sb-purple/20 flex items-center justify-center shrink-0">
@@ -116,13 +121,18 @@ export default function Subscription() {
           </ul>
           <button
             onClick={() => handleSubscribe(premiumPlan.stripePriceId)}
-            disabled={isActive || checkingOut || !premiumPlan.stripePriceId}
+            disabled={isActive || subscription?.is_admin || checkingOut || !premiumPlan.stripePriceId}
             className="w-full py-3 rounded-xl text-sm font-bold bg-sb-purple hover:bg-sb-purple/80 text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             {checkingOut ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 מעביר לתשלום...
+              </>
+            ) : subscription?.is_admin ? (
+              <>
+                <Shield className="w-4 h-4" />
+                מנהל - ללא תשלום
               </>
             ) : isActive ? (
               'מנוי פעיל'

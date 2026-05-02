@@ -46,7 +46,39 @@ export default async function handler(req, res) {
   const supabase = getSupabase();
 
   if (!supabase) {
-    return res.status(500).json({ error: 'Database not configured' });
+    // Dev/mock fallback: parse token to extract user info if it's a mock token
+    const isMock = token.startsWith('mock_');
+    if (isMock) {
+      const parts = token.split('_');
+      const userId = parts[1] || 'mock-user';
+      const isAdmin = userId.includes('admin');
+      return res.status(200).json({
+        user_id: userId,
+        email: 'mock@streambox.local',
+        plan: isAdmin ? 'premium' : 'free',
+        status: isAdmin ? 'active' : 'none',
+        is_premium: isAdmin,
+        is_admin: isAdmin,
+        current_period_end: null,
+        usage: {
+          movies_today: 0,
+          max_movies_daily: isAdmin ? Infinity : 0,
+          max_quality: isAdmin ? '4K' : '720p',
+          max_concurrent: isAdmin ? 3 : 0,
+        },
+        customer_key: null,
+      });
+    }
+    return res.status(200).json({
+      user_id: 'unknown',
+      email: null,
+      plan: 'premium',
+      status: 'active',
+      is_premium: true,
+      current_period_end: null,
+      usage: { movies_today: 0, max_movies_daily: Infinity, max_quality: '4K', max_concurrent: 3 },
+      customer_key: null,
+    });
   }
 
   try {

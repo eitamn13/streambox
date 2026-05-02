@@ -22,7 +22,7 @@ import {
 
 function Settings() {
   const { session, setSession, profiles, activeProfile, setActiveProfile, createProfile, deleteProfile } = useApp();
-  const { isPremium, planInfo, customerKey } = useSubscription();
+  const { subscription, isPremium, planInfo, customerKey } = useSubscription();
   const { t, lang, setLang, supportedLanguages } = useTranslation();
   const [cleared, setCleared] = useState(false);
   const [activeSection, setActiveSection] = useState('general');
@@ -125,11 +125,27 @@ function Settings() {
           ),
         },
         {
-          title: 'מנוי',
-          desc: isPremium ? `מנוי פרימיום פעיל - ${planInfo.price} ₪/חודש` : 'מנוי חינם - 3 סרטים ביום, עד 720p',
+          title: subscription?.is_admin ? 'מנהל מערכת' : (isPremium ? 'מנוי פרימיום' : 'מנוי חינם'),
+          desc: subscription?.is_admin
+            ? 'פרימיום אוניברסלי - ללא הגבלות'
+            : (isPremium
+                ? `מנוי פרימיום פעיל - ${planInfo.price} ₪/חודש`
+                : 'מנוי חינם - צפייה מוגבלת'),
           type: 'custom',
           render: () => (
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {subscription?.is_admin && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-sb-gold/20 text-sb-gold border border-sb-gold/30">
+                  <Shield className="w-3 h-3" />
+                  מנהל
+                </span>
+              )}
+              {isPremium && !subscription?.is_admin && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-sb-purple/20 text-sb-purple border border-sb-purple/30">
+                  <Crown className="w-3 h-3" />
+                  פרימיום פעיל
+                </span>
+              )}
               <Link
                 to="/subscription"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-purple text-white hover:bg-sb-purple/80 transition-colors"
