@@ -139,12 +139,19 @@ export function getStoredToken() {
   } catch { return ''; }
 }
 
-/** Get auth token: explicit localStorage first, then Supabase session */
+/** Get auth token: explicit localStorage first (ignore stale mock tokens), then Supabase session */
 export async function getAuthToken() {
   const explicit = getStoredToken();
-  if (explicit) return explicit;
+  // Ignore stale mock tokens from old builds
+  if (explicit && !explicit.startsWith('mock_')) return explicit;
   try {
     const { data } = await supabase.auth.getSession();
-    return data.session?.access_token || '';
-  } catch { return ''; }
+    const realToken = data.session?.access_token;
+    if (realToken) {
+      // Sync the real token to our key for consistency
+      setAuthToken(realToken);
+      return realToken;
+    }
+  } catch { /* ignore */ }
+  return '';
 }
