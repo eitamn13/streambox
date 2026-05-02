@@ -18,15 +18,32 @@ function getSupabase() {
 // Server-side admin check — cannot be bypassed from frontend
 async function isAdminUser(supabase, user) {
   if (!user) return false;
+  // 1. Check subscriptions table
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('subscriptions')
       .select('is_admin')
       .eq('user_id', user.id)
       .single();
+    console.log('[API] subscriptions is_admin query:', { userId: user.id, data, error: error?.message || null });
     if (data?.is_admin) return true;
-  } catch { /* ignore */ }
-  return user.email?.includes('admin') || false;
+  } catch (e) { console.log('[API] subscriptions check error:', e.message); }
+
+  // 2. Check users table as fallback
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    console.log('[API] users is_admin query:', { userId: user.id, data, error: error?.message || null });
+    if (data?.is_admin) return true;
+  } catch (e) { console.log('[API] users check error:', e.message); }
+
+  // 3. Email fallback
+  const emailAdmin = user.email?.includes('admin') || false;
+  console.log('[API] email admin check:', user.email, emailAdmin);
+  return emailAdmin;
 }
 
 export default async function handler(req, res) {
@@ -82,13 +99,16 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('[API] Starting auth check with token:', token.slice(0, 20) + '...');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    console.log('[API] Auth result:', { userId: user?.id, email: user?.email, authError: authError?.message || null });
     if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid token' });
+      return res.status(401).json({ error: 'Invalid token', details: authError?.message });
     }
 
     // Admin gets premium automatically — no Stripe needed
     const isAdmin = await isAdminUser(supabase, user);
+    console.log('[API] isAdmin result:', isAdmin);
     if (isAdmin) {
       return res.status(200).json({
         user_id: user.id,
@@ -109,12 +129,14 @@ export default async function handler(req, res) {
     }
 
     // Regular user — check subscription table
+    console.log('[API] Querying subscriptions for user:', user.id);
     const { data: sub, error: subError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', user.id)
       .single();
 
+    console.log('[API] Subscription query result:', { sub: sub || null, error: subError?.message || null, code: subError?.code || null });
     if (subError && subError.code !== 'PGRST116') {
       console.error('Subscription fetch error:', subError);
     }
@@ -135,7 +157,7 @@ export default async function handler(req, res) {
     const status = sub?.status || 'none';
     const isPremium = plan === 'premium' && (status === 'active' || status === 'trialing');
 
-    res.status(200).json({
+    const response = {
       user_id: user.id,
       email: user.email,
       plan,
@@ -149,7 +171,9 @@ export default async function handler(req, res) {
         max_concurrent: isPremium ? 3 : 0,
       },
       customer_key: sub?.customer_api_key || null,
-    });
+    };
+    console.log('[API] Returning response:', JSON.stringify(response));
+    res.status(200).json(response);
   } catch (error) {
     console.error('Subscription API error:', error);
     res.status(500).json({ error: 'Internal error', message: error.message });
