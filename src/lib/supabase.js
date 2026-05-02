@@ -1,7 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Support both Vite build-time env and runtime injection from Vercel
+function getEnv(key, fallback = '') {
+  // Build-time (Vite)
+  if (import.meta.env?.[key]) return import.meta.env[key];
+  // Runtime injection (Vercel or script tag)
+  if (typeof window !== 'undefined' && window.__ENV__?.[key]) return window.__ENV__[key];
+  return fallback;
+}
+
+const SUPABASE_URL = getEnv('VITE_SUPABASE_URL');
+const SUPABASE_ANON_KEY = getEnv('VITE_SUPABASE_ANON_KEY');
 
 // Fallback mock client when Supabase is not configured
 function createMockClient() {

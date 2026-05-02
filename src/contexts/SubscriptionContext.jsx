@@ -30,6 +30,7 @@ export function SubscriptionProvider({ children }) {
     return () => listener?.subscription?.unsubscribe();
   }, []);
 
+  // Load subscription on mount AND when session changes
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -50,6 +51,26 @@ export function SubscriptionProvider({ children }) {
     load();
     return () => { cancelled = true; };
   }, [session]);
+
+  // Also try loading immediately on mount (in case session loads async)
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const token = await getAuthToken();
+      if (!token) return;
+      try {
+        const sub = await fetchSubscription(token);
+        if (!cancelled) {
+          setSubscription(sub);
+          if (sub?.customer_key) setCustomerKey(sub.customer_key);
+        }
+      } catch (e) {
+        console.warn('Subscription mount load failed:', e);
+      }
+    }
+    const timer = setTimeout(load, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, []);
 
   const refreshSubscription = useCallback(async () => {
     const token = session?.access_token || await getAuthToken();
