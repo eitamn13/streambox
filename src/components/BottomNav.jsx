@@ -4,14 +4,15 @@ import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 
 function BottomNav() {
   const location = useLocation();
-  const { isPremium } = useSubscription();
+  const { isPremium, isTrialing } = useSubscription();
+  const needsSub = !isPremium && !isTrialing;
 
   const tabs = [
     { path: '/', label: 'בית', icon: Home },
     { path: '/discover', label: 'גלה', icon: Compass },
     { path: '/search', label: 'חיפוש', icon: Search },
     { path: '/library', label: 'ספרייה', icon: Library },
-    { path: '/subscription', label: 'מנוי', icon: Crown, highlight: !isPremium },
+    { path: '/subscription', label: 'מנוי', icon: Crown, highlight: needsSub },
   ];
 
   return (

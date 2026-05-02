@@ -1,10 +1,14 @@
-// Content Streaming API — One-click Netflix-style playback
-// Admin manages Debrid keys, customers never see them
-// ========================================================
+// Premium Content Streaming API — Centralized Debrid Backend
+// ===========================================================
+// Chains: Real-Debrid → Premiumize → TorBox → Auto-add
+// Admin manages all keys. Users never see debrid.
 
 import { createClient } from '@supabase/supabase-js';
 
 const ADMIN_RD_KEY = process.env.ADMIN_RD_API_KEY;
+const ADMIN_PM_KEY = process.env.ADMIN_PM_API_KEY;
+const ADMIN_TB_KEY = process.env.ADMIN_TB_API_KEY;
+
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -32,7 +36,46 @@ function detectQuality(filename = '') {
 }
 
 // ------------------------------------------------------------------
-// 1. Search Torrentio for streams by IMDB ID
+// Auth & Subscription check
+// ------------------------------------------------------------------
+async function checkSubscription(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { ok: false, plan: 'free', status: 'none', reason: 'לא מחובר' };
+  }
+
+  const token = authHeader.slice(7);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: true, plan: 'premium', status: 'active' }; // Dev fallback
+  }
+
+  try {
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) {
+      return { ok: false, plan: 'free', status: 'none', reason: 'סשן לא תקין' };
+    }
+
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('plan, status, current_period_end')
+      .eq('user_id', user.id)
+      .single();
+
+    const isActive = sub?.status === 'active' || sub?.status === 'trialing';
+    if (!isActive) {
+      return { ok: false, plan: sub?.plan || 'free', status: sub?.status || 'none', reason: 'נדרש מנוי פעיל' };
+    }
+
+    return { ok: true, plan: sub.plan, status: sub.status, userId: user.id };
+  } catch (e) {
+    console.warn('[content] Auth error:', e.message);
+    return { ok: false, plan: 'free', status: 'none', reason: 'שגיאת אימות' };
+  }
+}
+
+// ------------------------------------------------------------------
+// Torrent search — Torrentio + YTS
 // ------------------------------------------------------------------
 async function searchTorrentio(imdbId, type, season, episode) {
   if (!imdbId) return [];
@@ -63,9 +106,6 @@ async function searchTorrentio(imdbId, type, season, episode) {
   }
 }
 
-// ------------------------------------------------------------------
-// 2. Search YTS for movies (guaranteed 720p/1080p)
-// ------------------------------------------------------------------
 async function searchYts(imdbId) {
   if (!imdbId) return [];
   const cleanId = imdbId.toString().startsWith('tt') ? imdbId : `tt${imdbId}`;
@@ -73,7 +113,6 @@ async function searchYts(imdbId) {
     `https://yts.mx/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
     `https://yts.lt/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
   ];
-
   for (const url of mirrors) {
     try {
       const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(10000) });
@@ -95,15 +134,13 @@ async function searchYts(imdbId) {
         }
       }
       if (results.length > 0) return results;
-    } catch (e) {
-      console.warn('[content] YTS failed:', e.message);
-    }
+    } catch { /* try next mirror */ }
   }
   return [];
 }
 
 // ------------------------------------------------------------------
-// 3. Check Real-Debrid instant availability
+// Real-Debrid — instant availability + stream
 // ------------------------------------------------------------------
 async function checkRDAvailability(infoHash) {
   if (!ADMIN_RD_KEY) return false;
@@ -116,22 +153,15 @@ async function checkRDAvailability(infoHash) {
     const data = await res.json();
     const hashData = data[infoHash.toUpperCase()] || data[infoHash.toLowerCase()];
     return hashData && hashData.rd && hashData.rd.length > 0;
-  } catch (e) {
-    return false;
-  }
+  } catch { return false; }
 }
 
-// ------------------------------------------------------------------
-// 4. Add magnet to RD, select files, unrestrict
-// ------------------------------------------------------------------
 async function getRDStream(infoHash, title) {
   if (!ADMIN_RD_KEY) return null;
-
   const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title)}`;
   const headers = { Authorization: `Bearer ${ADMIN_RD_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' };
 
   try {
-    // Add magnet
     const addRes = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
       method: 'POST',
       headers,
@@ -143,11 +173,8 @@ async function getRDStream(infoHash, title) {
     if (!addData.id) return null;
 
     const torrentId = addData.id;
-
-    // Poll for ready (max 60s)
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 1000));
-
       const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
         headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` },
         signal: timeoutSignal(8000),
@@ -157,45 +184,196 @@ async function getRDStream(infoHash, title) {
 
       if (info.status === 'waiting_files_selection') {
         await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
-          method: 'POST',
-          headers,
+          method: 'POST', headers,
           body: new URLSearchParams({ files: 'all' }).toString(),
           signal: timeoutSignal(8000),
         });
       }
 
       if (info.status === 'downloaded' && info.links?.length > 0) {
-        // Unrestrict all links
         const streams = [];
         for (const link of info.links) {
           try {
             const unres = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
-              method: 'POST',
-              headers,
+              method: 'POST', headers,
               body: new URLSearchParams({ link }).toString(),
               signal: timeoutSignal(8000),
             });
             if (!unres.ok) continue;
             const unresData = await unres.json();
             if (unresData.download) {
-              streams.push({
-                url: unresData.download,
-                title: unresData.filename || title,
-                quality: detectQuality(unresData.filename),
-                provider: 'Real-Debrid',
-                type: 'direct',
-              });
+              streams.push({ url: unresData.download, title: unresData.filename || title, quality: detectQuality(unresData.filename), provider: 'Real-Debrid', type: 'direct' });
             }
           } catch { /* ignore */ }
         }
         return streams;
       }
-
       if (info.status === 'error') break;
     }
   } catch (e) {
-    console.warn('[content] RD stream failed:', e.message);
+    console.warn('[content] RD failed:', e.message);
   }
+  return null;
+}
+
+// ------------------------------------------------------------------
+// Premiumize — transfer + stream
+// ------------------------------------------------------------------
+async function getPMStream(infoHash, title) {
+  if (!ADMIN_PM_KEY) return null;
+  const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title)}`;
+
+  try {
+    // Create transfer
+    const createRes = await fetch('https://www.premiumize.me/api/transfer/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ apikey: ADMIN_PM_KEY, src: magnet }).toString(),
+      signal: timeoutSignal(10000),
+    });
+    if (!createRes.ok) return null;
+    const createData = await createRes.json();
+    if (!createData.status || createData.status !== 'success') return null;
+
+    // Poll transfers
+    for (let i = 0; i < 45; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const listRes = await fetch(
+        `https://www.premiumize.me/api/transfer/list?apikey=${ADMIN_PM_KEY}`,
+        { signal: timeoutSignal(8000) }
+      );
+      if (!listRes.ok) continue;
+      const listData = await listRes.json();
+      const transfers = listData.transfers || [];
+      const match = transfers.find(t => t.src?.toLowerCase().includes(infoHash.toLowerCase()));
+
+      if (match && match.status === 'finished') {
+        const folderId = match.folder_id;
+        if (!folderId) return null;
+        const folderRes = await fetch(
+          `https://www.premiumize.me/api/folder/list?id=${folderId}&apikey=${ADMIN_PM_KEY}`,
+          { signal: timeoutSignal(8000) }
+        );
+        if (!folderRes.ok) continue;
+        const folderData = await folderRes.json();
+        const files = folderData.content || [];
+        const video = files.find(f => f.name?.match(/\.(mp4|mkv|avi|mov)$/i));
+        if (video && video.link) {
+          return [{ url: video.link, title: video.name, quality: detectQuality(video.name), provider: 'Premiumize', type: 'direct' }];
+        }
+      }
+      if (match && match.status === 'error') break;
+    }
+  } catch (e) {
+    console.warn('[content] PM failed:', e.message);
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------
+// TorBox — torrent + stream
+// ------------------------------------------------------------------
+async function getTBStream(infoHash, title) {
+  if (!ADMIN_TB_KEY) return null;
+  const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title)}`;
+
+  try {
+    // Add torrent
+    const addRes = await fetch('https://api.torbox.app/v1/api/torrents', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ADMIN_TB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ magnet }),
+      signal: timeoutSignal(10000),
+    });
+    if (!addRes.ok) return null;
+    const addData = await addRes.json();
+    const torrentId = addData?.data?.torrent_id || addData?.torrent_id;
+    if (!torrentId) return null;
+
+    // Poll
+    for (let i = 0; i < 45; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const infoRes = await fetch(
+        `https://api.torbox.app/v1/api/torrents/${torrentId}`,
+        { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+      );
+      if (!infoRes.ok) continue;
+      const info = await infoRes.json();
+      const t = info?.data || info;
+
+      if (t.status === 'completed' || t.status === 'seeding') {
+        const filesRes = await fetch(
+          `https://api.torbox.app/v1/api/torrents/${torrentId}/files`,
+          { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+        );
+        if (!filesRes.ok) continue;
+        const filesData = await filesRes.json();
+        const files = filesData?.data || filesData?.files || [];
+        const video = files.find(f => f.name?.match(/\.(mp4|mkv|avi|mov)$/i));
+        if (video) {
+          const dlRes = await fetch(
+            `https://api.torbox.app/v1/api/torrents/${torrentId}/download/${video.id}`,
+            { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(8000) }
+          );
+          if (!dlRes.ok) continue;
+          const dlData = await dlRes.json();
+          if (dlData?.data?.url || dlData?.url) {
+            return [{ url: dlData.data?.url || dlData.url, title: video.name, quality: detectQuality(video.name), provider: 'TorBox', type: 'direct' }];
+          }
+        }
+      }
+      if (t.status === 'failed' || t.status === 'error') break;
+    }
+  } catch (e) {
+    console.warn('[content] TB failed:', e.message);
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------
+// Multi-debrid stream resolver — RD → PM → TB
+// ------------------------------------------------------------------
+async function resolveStream(torrent, usedProviders) {
+  const { infoHash, title } = torrent;
+  const streams = [];
+
+  // 1. Real-Debrid (instant or add)
+  if (ADMIN_RD_KEY && !usedProviders.has('rd')) {
+    const available = await checkRDAvailability(infoHash);
+    const rdStreams = await getRDStream(infoHash, title);
+    if (rdStreams && rdStreams.length > 0) {
+      for (const s of rdStreams) {
+        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
+      }
+      usedProviders.add('rd');
+      return streams;
+    }
+  }
+
+  // 2. Premiumize
+  if (ADMIN_PM_KEY && !usedProviders.has('pm')) {
+    const pmStreams = await getPMStream(infoHash, title);
+    if (pmStreams && pmStreams.length > 0) {
+      for (const s of pmStreams) {
+        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'pm' });
+      }
+      usedProviders.add('pm');
+      return streams;
+    }
+  }
+
+  // 3. TorBox
+  if (ADMIN_TB_KEY && !usedProviders.has('tb')) {
+    const tbStreams = await getTBStream(infoHash, title);
+    if (tbStreams && tbStreams.length > 0) {
+      for (const s of tbStreams) {
+        streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'tb' });
+      }
+      usedProviders.add('tb');
+      return streams;
+    }
+  }
+
   return null;
 }
 
@@ -205,82 +383,66 @@ async function getRDStream(infoHash, title) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { imdbId, type, season, episode } = req.query;
-  if (!imdbId) return res.status(400).json({ error: 'Missing imdbId' });
+  const { imdbId, type, season, episode, title } = req.query;
 
-  if (!ADMIN_RD_KEY) {
-    return res.status(500).json({ error: 'Admin Debrid not configured' });
+  // 1. Check subscription
+  const subCheck = await checkSubscription(req);
+  if (!subCheck.ok) {
+    return res.status(403).json({
+      error: 'Subscription required',
+      message: subCheck.reason,
+      redirect: '/subscription',
+      count: 0,
+      streams: [],
+    });
   }
 
-  // Optional: verify user subscription
-  const authHeader = req.headers.authorization;
-  let plan = 'free';
-  if (authHeader?.startsWith('Bearer ') && getSupabase()) {
-    try {
-      const token = authHeader.slice(7);
-      const { data: { user } } = await getSupabase().auth.getUser(token);
-      if (user) {
-        const { data: sub } = await getSupabase()
-          .from('subscriptions')
-          .select('plan, status')
-          .eq('user_id', user.id)
-          .single();
-        if (sub?.status === 'active' || sub?.status === 'trialing') plan = sub.plan;
-      }
-    } catch { /* ignore auth errors, fall back to free */ }
+  if (!imdbId && !title) {
+    return res.status(400).json({ error: 'Missing imdbId or title' });
   }
 
-  console.log(`[content] Request: ${imdbId} ${type} S${season || '-'}E${episode || '-'} plan=${plan}`);
+  const searchTitle = title || '';
+  console.log(`[content] ${imdbId || '-'} "${searchTitle}" ${type || 'movie'} S${season || '-'}E${episode || '-'} plan=${subCheck.plan}`);
 
-  // 1. Search Torrentio + YTS (movies only)
+  // 2. Search torrents
   const torrentioResults = await searchTorrentio(imdbId, type, season, episode);
   const ytsResults = type !== 'series' ? await searchYts(imdbId) : [];
-  const allResults = [...torrentioResults, ...ytsResults];
-  console.log(`[content] Torrentio: ${torrentioResults.length}, YTS: ${ytsResults.length}, total: ${allResults.length}`);
+  const allTorrents = [...torrentioResults, ...ytsResults];
+  console.log(`[content] Torrents: ${allTorrents.length}`);
 
-  // 2. Check availability and get streams
+  // 3. Resolve streams via debrid chain
   const streams = [];
-  const checked = new Set();
+  const checkedHashes = new Set();
+  const usedProviders = new Set();
 
-  for (const result of allResults.slice(0, 8)) {
-    if (checked.has(result.infoHash)) continue;
-    checked.add(result.infoHash);
+  for (const torrent of allTorrents.slice(0, 6)) {
+    if (checkedHashes.has(torrent.infoHash)) continue;
+    checkedHashes.add(torrent.infoHash);
 
-    const available = await checkRDAvailability(result.infoHash);
-    console.log(`[content] ${result.infoHash} available: ${available}`);
-
-    if (available) {
-      const rdStreams = await getRDStream(result.infoHash, result.title);
-      if (rdStreams && rdStreams.length > 0) {
-        for (const s of rdStreams) {
-          streams.push({
-            ...s,
-            quality: result.quality,
-            size: result.size,
-            sourceType: 'debrid',
-            infoHash: result.infoHash,
-          });
-        }
-      }
+    const resolved = await resolveStream(torrent, usedProviders);
+    if (resolved && resolved.length > 0) {
+      streams.push(...resolved);
+      // Continue trying other hashes for backup streams
     }
   }
 
-  // Sort by quality
+  // 4. Sort by quality
   const qualityOrder = { '4K': 4, '2160p': 4, '1080p': 3, '720p': 2, '480p': 1, 'auto': 0 };
   streams.sort((a, b) => (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0));
 
   console.log(`[content] Returning ${streams.length} streams`);
 
   res.status(200).json({
-    imdbId,
-    type,
+    imdbId: imdbId || null,
+    type: type || 'movie',
     season,
     episode,
-    plan,
+    plan: subCheck.plan,
     count: streams.length,
-    streams: streams.slice(0, 5),
+    streams: streams.slice(0, 10),
   });
 }

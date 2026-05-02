@@ -11,7 +11,7 @@ function TopBar() {
   const [query, setQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const inputRef = useRef(null);
-  const { isPremium } = useSubscription();
+  const { isPremium, isTrialing } = useSubscription();
   const { isAdmin } = useApp();
 
   useEffect(() => {
@@ -60,7 +60,12 @@ function TopBar() {
             <Tv className="w-4.5 h-4.5 text-white" />
           </div>
           <span className="text-xl font-bold text-white tracking-tight hidden sm:block">StreamBox</span>
-          {isPremium && (
+          {isTrialing && (
+            <span className="hidden sm:inline-flex items-center gap-1 bg-sb-blue text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+              ניסיון
+            </span>
+          )}
+          {isPremium && !isTrialing && (
             <span className="hidden sm:inline-flex items-center gap-1 bg-sb-purple text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
               <Crown className="w-3 h-3" />
               פרימיום

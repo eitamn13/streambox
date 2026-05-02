@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getContentDetails } from '../core/StreamBoxCore.js';
 import { fetchStreams } from '../core/StreamEngine.js';
-import { searchMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
 import { fetchSubtitles, loadSubtitleTrack, LANGUAGE_NAMES } from '../core/SubtitleEngine.js';
 import { addToHistory } from '../core/History.js';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
@@ -10,7 +9,7 @@ import SubtitleOverlay from './SubtitleOverlay.jsx';
 import {
   ArrowRight, Maximize, Minimize, Volume2, VolumeX, Play, Pause,
   Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay,
-  AlertCircle, Crown, RefreshCw
+  AlertCircle, RefreshCw, Crown
 } from 'lucide-react';
 
 let Hls = null;
@@ -20,8 +19,7 @@ function Player() {
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const containerRef = useRef(null);
-
-  const { watchCheck, recordWatch, filterStreams, isPremium, planInfo } = useSubscription();
+  const { watchCheck, isPremium, isTrialing } = useSubscription();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,18 +41,13 @@ function Player() {
   const [hlsInstance, setHlsInstance] = useState(null);
   const controlsTimeout = useRef(null);
 
-  // Auto-play flow states (internal, no UI exposed)
   const [addProgress, setAddProgress] = useState('');
-  const [rdConfigured] = useState(() => getConfiguredDebrids().some(s => s.id === 'realdebrid'));
-  const autoPlayAttemptedRef = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  // Auto-subtitle states
   const [autoSubtitles, setAutoSubtitles] = useState([]);
   const [activeSubTrack, setActiveSubTrack] = useState(null);
   const trackRef = useRef(null);
 
-  // Build search title (with SxxExx for TV episodes)
   const searchTitle = data?.title
     ? (type === 'tv' && season && episode)
       ? `${data.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
@@ -87,8 +80,7 @@ function Player() {
       const video = videoRef.current;
       if (video && video.currentTime > 10) {
         addToHistory({
-          id,
-          type,
+          id, type,
           title: data.title,
           poster: data.poster,
           progress: video.currentTime,
@@ -109,34 +101,26 @@ function Player() {
       setError(null);
       setAddProgress('בודק מנוי...');
 
-      try {
-        const check = watchCheck();
-        if (!check.allowed) {
-          if (!cancelled) {
-            setError(check.reason);
-            setStreamLoading(false);
-          }
-          return;
-        }
-
-        setAddProgress('מחפש בספרייה...');
-        const results = await fetchStreams(id, type, data.title, data.year, data.imdbId, season || null, episode || null);
-        const filtered = filterStreams(results);
-
+      const check = watchCheck();
+      if (!check.allowed) {
         if (!cancelled) {
-          setStreams(filtered);
-          if (filtered.length > 0) {
-            setCurrentStream(filtered[0]);
-            recordWatch();
-            setAddProgress('');
-          } else if (rdConfigured && !autoPlayAttemptedRef.current) {
-            autoPlayAttemptedRef.current = true;
-            await autoSearchAndPlay();
-          } else if (!rdConfigured) {
-            setError('Real-Debrid לא מחובר. פנה למנהל המערכת.');
-          } else {
-            setError('לא נמצאו מקורות לצפייה');
-          }
+          setError(check.reason);
+          setStreamLoading(false);
+        }
+        return;
+      }
+
+      setAddProgress('מחפש מקורות...');
+      try {
+        const results = await fetchStreams(id, type, data.title, data.year, data.imdbId, season || null, episode || null);
+        if (cancelled) return;
+
+        setStreams(results);
+        if (results.length > 0) {
+          setCurrentStream(results[0]);
+          setAddProgress('');
+        } else {
+          setError('לא נמצאו מקורות לצפייה');
         }
       } catch (e) {
         console.warn('[Player] Stream load failed:', e);
@@ -146,65 +130,9 @@ function Player() {
       }
     }
 
-    async function autoSearchAndPlay() {
-      setAddProgress('מחפש מקורות ברשת...');
-      try {
-        const magnets = await searchMagnets(searchTitle, data.year, data.imdbId, type);
-        if (cancelled) return;
-
-        if (magnets.length === 0) {
-          setAddProgress('');
-          setError('לא נמצאו מקורות להורדה');
-          return;
-        }
-
-        const allowedQualities = isPremium
-          ? ['4K', '2160p', '1080p', '720p', '480p', 'auto']
-          : ['720p', '480p', 'auto'];
-        let best = magnets.find(m => allowedQualities.includes(m.quality));
-        let locked = false;
-        if (!best) {
-          // No allowed quality found — pick lowest quality available and mark locked
-          const qualityOrder = { '480p': 1, '720p': 2, '1080p': 3, '4K': 4, 'auto': 2 };
-          best = [...magnets].sort((a, b) => (qualityOrder[a.quality] || 2) - (qualityOrder[b.quality] || 2))[0];
-          locked = !isPremium;
-        }
-
-        setAddProgress(`מוסיף ${best.quality || ''} לשרת...`);
-        const debridStreams = await addMagnetToRd(best.magnet, searchTitle, (msg) => {
-          setAddProgress(msg);
-        });
-
-        if (cancelled) return;
-
-        if (debridStreams.length > 0) {
-          const filtered = filterStreams(debridStreams);
-          if (locked && filtered.length > 0 && !filtered[0].locked) {
-            filtered[0] = { ...filtered[0], locked: true };
-          }
-          setStreams(prev => [...prev, ...filtered]);
-          if (filtered.length > 0) {
-            setCurrentStream(filtered[0]);
-            recordWatch();
-          } else {
-            setError('לא נמצאו קבצים להורדה');
-          }
-        } else {
-          setError('לא נמצאו קבצים להורדה');
-        }
-      } catch (e) {
-        if (!cancelled) {
-          console.warn('[Player] Auto-play failed:', e);
-          setError(e.message || 'ההפעלה האוטומטית נכשלה');
-        }
-      } finally {
-        if (!cancelled) setAddProgress('');
-      }
-    }
-
     loadStreams();
     return () => { cancelled = true; };
-  }, [data, id, type, searchTitle, rdConfigured, watchCheck, filterStreams, recordWatch, isPremium, retryCount]);
+  }, [data, id, type, searchTitle, watchCheck, retryCount]);
 
   // Auto-fetch subtitles
   useEffect(() => {
@@ -223,7 +151,6 @@ function Player() {
         const hebrew = results.find(s => s.lang === 'heb' || s.lang === 'he');
         const english = results.find(s => s.lang === 'eng' || s.lang === 'en');
         const best = hebrew || english;
-
         setAutoSubtitles(results);
 
         if (best && videoRef.current) {
@@ -323,13 +250,23 @@ function Player() {
     };
   }, [currentStream]);
 
-  // Video event listeners
+  // Sync muted/volume to video element (more reliable than JSX prop)
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (video) {
+      video.muted = muted;
+      video.volume = volume;
+    }
+  }, [muted, volume]);
+
+  // Video event listeners — re-attach when stream changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !currentStream) return;
 
     const onTimeUpdate = () => setProgress(video.currentTime);
     const onDurationChange = () => setDuration(video.duration || 0);
+    const onLoadedMetadata = () => setDuration(video.duration || 0);
     const onProgress = () => {
       if (video.buffered.length > 0) {
         setBuffered(video.buffered.end(video.buffered.length - 1));
@@ -341,20 +278,27 @@ function Player() {
 
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('durationchange', onDurationChange);
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('progress', onProgress);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('error', onError);
 
+    // Immediate check in case duration is already available
+    if (video.duration && !isNaN(video.duration)) {
+      setDuration(video.duration);
+    }
+
     return () => {
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('durationchange', onDurationChange);
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('progress', onProgress);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('error', onError);
     };
-  }, [videoRef.current]);
+  }, [currentStream]);
 
   // Auto-hide controls
   const resetControlsTimeout = useCallback(() => {
@@ -420,7 +364,6 @@ function Player() {
   };
 
   const handleRetry = () => {
-    autoPlayAttemptedRef.current = false;
     setRetryCount(c => c + 1);
     setError(null);
   };
@@ -434,6 +377,7 @@ function Player() {
   }
 
   const isDirectStream = currentStream && (currentStream.type === 'direct' || currentStream.url?.match(/\.(mp4|webm|m3u8|mkv)($|\?)/i));
+  const isIframe = currentStream && currentStream.type === 'iframe';
   const hasStreams = streams.length > 0;
   const isBusy = streamLoading || addProgress;
 
@@ -448,7 +392,14 @@ function Player() {
         <h1 className="text-white font-semibold truncate max-w-[50vw] sm:max-w-md text-sm sm:text-base">
           {data?.title}{type === 'tv' && season && episode ? ` S${season}E${episode}` : ''}
         </h1>
-        <div className="w-16" />
+        <div className="flex items-center gap-2">
+          {isTrialing && (
+            <span className="text-[10px] bg-sb-blue/20 text-sb-blue px-2 py-0.5 rounded-full font-bold">ניסיון</span>
+          )}
+          {isPremium && !isTrialing && (
+            <span className="text-[10px] bg-sb-purple/20 text-sb-purple px-2 py-0.5 rounded-full font-bold">פרימיום</span>
+          )}
+        </div>
       </div>
 
       {/* Video Area */}
@@ -457,13 +408,20 @@ function Player() {
         onMouseMove={resetControlsTimeout}
         onClick={() => { togglePlay(); resetControlsTimeout(); }}
       >
-        {isDirectStream ? (
+        {isIframe ? (
+          <iframe
+            src={currentStream.url}
+            className="w-full h-full max-h-[70vh]"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            title={data?.title}
+          />
+        ) : isDirectStream ? (
           <video
             ref={videoRef}
             className="w-full h-full max-h-[70vh] object-contain"
             playsInline
             controls={false}
-            muted={muted}
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           />
         ) : (
@@ -472,15 +430,6 @@ function Player() {
             <h2 className="text-xl text-white mb-2">{data?.title}</h2>
             {type === 'tv' && season && episode && (
               <p className="text-sb-gray mb-4">עונה {season} פרק {episode}</p>
-            )}
-
-            {!isPremium && (
-              <div className="bg-sb-purple/10 border border-sb-purple/20 rounded-xl p-3 mb-4">
-                <div className="flex items-center justify-center gap-2 text-sb-purple text-sm">
-                  <Crown className="w-4 h-4" />
-                  <span>מנוי חינם - {planInfo?.limits?.maxMoviesDaily || 3} סרטים ביום, עד {planInfo?.limits?.maxQuality || '720p'}</span>
-                </div>
-              </div>
             )}
 
             {isBusy && (
@@ -502,7 +451,7 @@ function Player() {
         )}
 
         {/* Center Play Button */}
-        {showControls && !playing && isDirectStream && (
+        {!playing && isDirectStream && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <button
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
@@ -519,13 +468,13 @@ function Player() {
             <div className="bg-sb-card rounded-xl p-6 text-center max-w-sm mx-4">
               <AlertCircle className="w-8 h-8 text-sb-red mx-auto mb-2" />
               <p className="text-sb-red font-medium mb-2">{error}</p>
-              {!isPremium && error.includes('מכסת') && (
+              {error.includes('מנוי') && (
                 <button
                   onClick={() => navigate('/subscription')}
                   className="mt-2 flex items-center justify-center gap-2 mx-auto bg-sb-purple hover:bg-sb-purple/80 text-white px-4 py-2 rounded-lg text-sm font-medium"
                 >
                   <Crown className="w-4 h-4" />
-                  שדרג לפרימיום
+                  צפה במנויים
                 </button>
               )}
               <button
@@ -575,13 +524,8 @@ function Player() {
                         currentStream?.url === stream.url ? 'bg-sb-red text-white' : 'bg-sb-surface text-sb-light hover:bg-sb-border'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{stream.title}</p>
-                        {stream.locked && (
-                          <span className="text-[10px] bg-sb-purple text-white px-1.5 py-0.5 rounded font-bold shrink-0">פרימיום</span>
-                        )}
-                      </div>
-                      <p className="text-xs opacity-70">{stream.quality} • {stream.provider}</p>
+                      <p className="text-sm font-medium">{stream.title}</p>
+                      <p className="text-xs opacity-70">{stream.quality} • {stream.provider}{stream.service ? ` (${stream.service.toUpperCase()})` : ''}</p>
                     </button>
                   ))}
                 </div>
@@ -651,15 +595,7 @@ function Player() {
                 >
                   <MonitorPlay className="w-3.5 h-3.5" />
                   {currentStream?.title?.slice(0, 15) || 'מקור'}
-                  {currentStream?.locked && (
-                    <span className="text-[10px] bg-sb-purple text-white px-1 py-0.5 rounded font-bold mr-1">פרימיום</span>
-                  )}
                 </button>
-              )}
-              {currentStream?.locked && (
-                <span className="sm:hidden text-[10px] bg-sb-purple text-white px-1.5 py-0.5 rounded font-bold">
-                  פרימיום
-                </span>
               )}
             </div>
 

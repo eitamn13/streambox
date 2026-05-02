@@ -4,7 +4,6 @@ import {
   fetchSubscription,
   getCustomerKey,
   setCustomerKey,
-  clearCustomerKey,
   canWatchMovie,
   recordMovieWatch,
   isQualityAllowed,
@@ -21,7 +20,6 @@ export function SubscriptionProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [session, setSessionState] = useState(null);
 
-  // Watch auth state
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSessionState(data.session);
@@ -32,7 +30,6 @@ export function SubscriptionProvider({ children }) {
     return () => listener?.subscription?.unsubscribe();
   }, []);
 
-  // Fetch subscription when session changes
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -42,10 +39,7 @@ export function SubscriptionProvider({ children }) {
         const sub = await fetchSubscription(token);
         if (!cancelled) {
           setSubscription(sub);
-          // If server returned a customer key, store it
-          if (sub?.customer_key) {
-            setCustomerKey(sub.customer_key);
-          }
+          if (sub?.customer_key) setCustomerKey(sub.customer_key);
         }
       } catch (e) {
         console.warn('Subscription load failed:', e);
@@ -93,6 +87,7 @@ export function SubscriptionProvider({ children }) {
 
   const plan = subscription?.plan || 'free';
   const isPremium = subscription?.is_premium || false;
+  const isTrialing = subscription?.status === 'trialing';
   const planInfo = getPlanInfo(plan);
 
   return (
@@ -102,6 +97,7 @@ export function SubscriptionProvider({ children }) {
         loading,
         plan,
         isPremium,
+        isTrialing,
         planInfo,
         customerKey: getCustomerKey(),
         saasMode: isSaaSMode(),

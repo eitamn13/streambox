@@ -5,13 +5,12 @@ import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { supabase } from '../lib/supabase';
 import {
   User, Mail, Calendar, LogOut, ChevronLeft, Loader2,
-  Save, CheckCircle, AlertCircle, KeyRound, Crown,
-  RefreshCw, CreditCard
+  Save, CheckCircle, AlertCircle, Crown, RefreshCw, CreditCard, Gift
 } from 'lucide-react';
 
 export default function Profile() {
   const { session, setSession } = useApp();
-  const { subscription, isPremium, planInfo, refreshSubscription, customerKey } = useSubscription();
+  const { subscription, isPremium, isTrialing, planInfo, refreshSubscription } = useSubscription();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const user = session?.user;
@@ -22,7 +21,6 @@ export default function Profile() {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Handle checkout success
   useEffect(() => {
     if (searchParams.get('checkout') === 'success') {
       setMessage('התשלום בוצע בהצלחה! המנוי שלך מתעדכן...');
@@ -79,14 +77,19 @@ export default function Profile() {
           <h2 className="text-white font-semibold">{user?.user_metadata?.full_name || 'משתמש'}</h2>
           <p className="text-sb-gray text-sm">{user?.email}</p>
           <div className="mt-3 flex items-center justify-center gap-2">
-            {isPremium ? (
+            {isTrialing ? (
+              <span className="inline-flex items-center gap-1 bg-sb-blue/20 text-sb-blue text-xs font-bold px-3 py-1 rounded-full">
+                <Gift className="w-3 h-3" />
+                בתקופת ניסיון
+              </span>
+            ) : isPremium ? (
               <span className="inline-flex items-center gap-1 bg-sb-purple/20 text-sb-purple text-xs font-bold px-3 py-1 rounded-full">
                 <Crown className="w-3 h-3" />
-                {subscription?.status === 'trialing' ? 'ניסיון' : 'פרימיום'}
+                פרימיום
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 bg-sb-surface text-sb-gray text-xs px-3 py-1 rounded-full">
-                חינם
+                ללא מנוי
               </span>
             )}
           </div>
@@ -117,7 +120,7 @@ export default function Profile() {
             <div className="flex justify-between">
               <span className="text-sb-gray">סטטוס</span>
               <span className={subscription?.status === 'active' || subscription?.status === 'trialing' ? 'text-sb-green' : 'text-sb-gray'}>
-                {subscription?.status === 'active' ? 'פעיל' : subscription?.status === 'trialing' ? 'בניסיון' : subscription?.status || 'פעיל'}
+                {subscription?.status === 'active' ? 'פעיל' : subscription?.status === 'trialing' ? 'בניסיון' : subscription?.status || 'ללא מנוי'}
               </span>
             </div>
             {subscription?.current_period_end && (
@@ -130,21 +133,15 @@ export default function Profile() {
                 </span>
               </div>
             )}
-            {customerKey && (
-              <div className="flex justify-between">
-                <span className="text-sb-gray">מפתח לקוח</span>
-                <span className="text-sb-gray font-mono text-xs">{customerKey.slice(0, 8)}...</span>
-              </div>
-            )}
           </div>
 
-          {!isPremium && (
+          {!isPremium && !isTrialing && (
             <Link
               to="/subscription"
               className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-sb-purple hover:bg-sb-purple/80 text-white rounded-xl text-sm font-bold transition-colors"
             >
               <Crown className="w-4 h-4" />
-              שדרג לפרימיום
+              התחל ניסיון חינם
             </Link>
           )}
         </div>
@@ -186,19 +183,6 @@ export default function Profile() {
               <input
                 type="email"
                 value={user?.email || ''}
-                disabled
-                className="w-full bg-sb-surface border border-sb-border rounded-xl pr-10 pl-4 py-3 text-sm text-sb-gray outline-none opacity-60"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-sb-gray mb-2">מזהה משתמש</label>
-            <div className="relative">
-              <KeyRound className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-sb-gray" />
-              <input
-                type="text"
-                value={user?.id || ''}
                 disabled
                 className="w-full bg-sb-surface border border-sb-border rounded-xl pr-10 pl-4 py-3 text-sm text-sb-gray outline-none opacity-60"
               />

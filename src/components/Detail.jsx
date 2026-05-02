@@ -1,27 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getContentDetails, getSeasonDetails } from '../core/StreamBoxCore.js';
-import { fetchStreams } from '../core/StreamEngine.js';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/History.js';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import {
   Play, Star, Clock, Calendar, Film, Bookmark, BookmarkCheck,
-  MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award,
-  Crown, ChevronDown
+  Loader2, ChevronLeft, Users, Globe, Award, ChevronDown,
+  Crown
 } from 'lucide-react';
 
 function Detail() {
   const { type, id } = useParams();
   const navigate = useNavigate();
-  const { isPremium, watchCheck, filterStreams, recordWatch } = useSubscription();
+  const { isPremium, isTrialing, watchCheck } = useSubscription();
   const [data, setData] = useState(null);
-  const [streams, setStreams] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [streamsLoading, setStreamsLoading] = useState(true);
   const [inWatchlist, setInWatchlist] = useState(false);
   const [showAllCast, setShowAllCast] = useState(false);
 
-  // TV seasons/episode states
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [seasonData, setSeasonData] = useState(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -30,34 +26,24 @@ function Detail() {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      setStreamsLoading(true);
       try {
         const details = await getContentDetails(id, type);
-        const streamResults = await fetchStreams(id, type, details?.title, details?.year);
         if (!cancelled) {
           setData(details);
-          setStreams(filterStreams(streamResults));
           setInWatchlist(isInWatchlist(id, type));
-          // Auto-select first real season (skip specials which are season 0)
           const firstRealSeason = details.seasons?.find(s => s.season_number > 0);
-          if (firstRealSeason) {
-            setSelectedSeason(firstRealSeason.season_number);
-          }
+          if (firstRealSeason) setSelectedSeason(firstRealSeason.season_number);
         }
       } catch (_err) {
         console.error('Failed to load details:', _err);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setStreamsLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
     load();
     return () => { cancelled = true };
-  }, [type, id, filterStreams]);
+  }, [type, id]);
 
-  // Fetch season episodes when selectedSeason changes
   useEffect(() => {
     if (type !== 'tv' || !selectedSeason) return;
     let cancelled = false;
@@ -77,30 +63,18 @@ function Detail() {
   }, [type, id, selectedSeason]);
 
   const toggleWatchlist = () => {
-    if (inWatchlist) {
-      removeFromWatchlist(id, type);
-    } else {
-      addToWatchlist({ id, type, title: data?.title, poster: data?.poster });
-    }
+    if (inWatchlist) removeFromWatchlist(id, type);
+    else addToWatchlist({ id, type, title: data?.title, poster: data?.poster });
     setInWatchlist(!inWatchlist);
   };
 
-  const handlePlayMovie = () => {
+  const handlePlay = (path) => {
     const check = watchCheck();
     if (!check.allowed) {
-      alert(check.reason);
+      navigate('/subscription');
       return;
     }
-    navigate(`/player/movie/${id}`);
-  };
-
-  const handlePlayEpisode = (seasonNum, episodeNum) => {
-    const check = watchCheck();
-    if (!check.allowed) {
-      alert(check.reason);
-      return;
-    }
-    navigate(`/player/tv/${id}/${seasonNum}/${episodeNum}`);
+    navigate(path);
   };
 
   if (loading) {
@@ -124,9 +98,9 @@ function Detail() {
     );
   }
 
-  const hasStreams = streams.length > 0;
   const isTv = type === 'tv';
   const seasons = data.seasons?.filter(s => s.season_number > 0) || [];
+  const hasAccess = isPremium || isTrialing;
 
   return (
     <div className="page-transition">
@@ -139,10 +113,7 @@ function Detail() {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-sb-black via-sb-black/50 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-l from-sb-black/40 via-transparent to-transparent" />
-        <Link
-          to="/"
-          className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition-all"
-        >
+        <Link to="/" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition-all">
           <ChevronLeft className="w-5 h-5" />
         </Link>
       </div>
@@ -200,12 +171,21 @@ function Detail() {
               ))}
             </div>
 
-            {/* Free plan notice */}
-            {!isPremium && (
-              <div className="bg-sb-purple/10 border border-sb-purple/20 rounded-xl p-3 mb-4">
-                <div className="flex items-center gap-2 text-sb-purple text-sm">
-                  <Crown className="w-4 h-4" />
-                  <span>מנוי חינם - 3 סרטים ביום, עד 720p. <Link to="/subscription" className="underline hover:text-white">שדרג לפרימיום</Link></span>
+            {/* Subscription notice for non-premium */}
+            {!hasAccess && (
+              <div className="bg-sb-purple/10 border border-sb-purple/20 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <Crown className="w-5 h-5 text-sb-purple shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white text-sm font-medium mb-1">נדרש מנוי פרימיום</p>
+                    <p className="text-sb-gray text-xs mb-2">צפה בסרטים וסדרות באיכות 4K עם כתוביות אוטומטיות. התחל ניסיון חינם ל-7 ימים!</p>
+                    <button
+                      onClick={() => navigate('/subscription')}
+                      className="bg-sb-purple hover:bg-sb-purple/80 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
+                    >
+                      התחל ניסיון חינם
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -213,16 +193,16 @@ function Detail() {
             <div className="flex flex-wrap gap-3 mb-8">
               {!isTv ? (
                 <button
-                  onClick={handlePlayMovie}
+                  onClick={() => handlePlay(`/player/movie/${id}`)}
                   className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
                 >
-                  <MonitorPlay className="w-5 h-5" />
+                  <Play className="w-5 h-5" />
                   צפה עכשיו
                 </button>
               ) : (
                 seasons.length > 0 && (
                   <button
-                    onClick={() => handlePlayEpisode(seasons[0].season_number, 1)}
+                    onClick={() => handlePlay(`/player/tv/${id}/${seasons[0].season_number}/1`)}
                     className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
                   >
                     <Play className="w-5 h-5" />
@@ -249,10 +229,9 @@ function Detail() {
               {data.tagline && <p className="text-sb-gray italic mt-3 text-sm">"{data.tagline}"</p>}
             </div>
 
-            {/* Seasons & Episodes (TV only) */}
+            {/* Seasons & Episodes */}
             {isTv && seasons.length > 0 && (
               <div className="mb-8">
-                {/* Season Selector */}
                 <div className="flex items-center gap-3 mb-4">
                   <h2 className="text-white font-bold text-lg">עונות</h2>
                   <div className="relative">
@@ -271,7 +250,6 @@ function Detail() {
                   </div>
                 </div>
 
-                {/* Episodes Grid */}
                 {seasonLoading ? (
                   <div className="flex items-center gap-2 text-sb-gray py-4">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -282,7 +260,7 @@ function Detail() {
                     {seasonData.episodes.map((ep) => (
                       <button
                         key={ep.episodeNumber}
-                        onClick={() => handlePlayEpisode(selectedSeason, ep.episodeNumber)}
+                        onClick={() => handlePlay(`/player/tv/${id}/${selectedSeason}/${ep.episodeNumber}`)}
                         className="flex gap-3 bg-sb-card hover:bg-sb-surface border border-sb-border hover:border-sb-red/30 rounded-xl p-3 text-right transition-all group"
                       >
                         <div className="shrink-0 w-28 aspect-video rounded-lg overflow-hidden bg-sb-surface">
@@ -307,9 +285,7 @@ function Detail() {
                                 {ep.runtime} דק'
                               </span>
                             )}
-                            {ep.airDate && (
-                              <span className="text-sb-gray text-xs">{ep.airDate}</span>
-                            )}
+                            {ep.airDate && <span className="text-sb-gray text-xs">{ep.airDate}</span>}
                           </div>
                         </div>
                         <div className="shrink-0 flex items-center">
@@ -364,23 +340,13 @@ function Detail() {
             {/* Links */}
             <div className="flex flex-wrap gap-3">
               {data.imdbId && (
-                <a
-                  href={`https://www.imdb.com/title/${data.imdbId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sb-gold hover:text-sb-gold-hover text-sm transition-colors"
-                >
+                <a href={`https://www.imdb.com/title/${data.imdbId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sb-gold hover:text-sb-gold-hover text-sm transition-colors">
                   <Award className="w-4 h-4" />
                   IMDB
                 </a>
               )}
               {data.homepage && (
-                <a
-                  href={data.homepage}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sb-blue hover:text-sb-blue-hover text-sm transition-colors"
-                >
+                <a href={data.homepage} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sb-blue hover:text-sb-blue-hover text-sm transition-colors">
                   <Globe className="w-4 h-4" />
                   אתר רשמי
                 </a>
