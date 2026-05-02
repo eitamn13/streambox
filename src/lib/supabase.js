@@ -1,10 +1,9 @@
-// Mock Supabase client - works locally via localStorage
-// Replace with real Supabase credentials to enable cloud auth
-// Get yours at: https://supabase.com
+import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Fallback mock client when Supabase is not configured
 function createMockClient() {
   const subscribers = new Map();
 
@@ -53,6 +52,19 @@ function createMockClient() {
         notify('SIGNED_OUT', null);
         return { error: null };
       },
+      resetPasswordForEmail: async (email, options) => {
+        return { data: null, error: { message: 'Mock mode: password reset not available without Supabase' } };
+      },
+      updateUser: async (attrs) => {
+        const raw = localStorage.getItem('sb-session');
+        const session = raw ? JSON.parse(raw) : null;
+        if (session?.user) {
+          session.user.user_metadata = { ...session.user.user_metadata, ...attrs.data };
+          localStorage.setItem('sb-session', JSON.stringify(session));
+          notify('USER_UPDATED', session);
+        }
+        return { data: { user: session?.user || null }, error: null };
+      },
       onAuthStateChange: (callback) => {
         const key = 'AUTH_STATE_CHANGE';
         if (!subscribers.has(key)) subscribers.set(key, []);
@@ -74,4 +86,6 @@ function createMockClient() {
   };
 }
 
-export const supabase = createMockClient();
+export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : createMockClient();

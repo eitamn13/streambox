@@ -15,7 +15,7 @@ import { supabase } from '../lib/supabase.js';
 import {
   Tv, Trash2, RefreshCw, Info, Puzzle, Shield, Lock,
   MonitorPlay, ChevronLeft, Check, Key, Globe, AlertTriangle,
-  Languages, User, LogOut, LogIn, UserPlus
+  Languages, User, LogOut, LogIn, UserPlus, Settings as Cog
 } from 'lucide-react';
 
 function Settings() {
@@ -89,13 +89,19 @@ function Settings() {
           render: () => (
             <div className="mt-3 flex gap-2">
               {session ? (
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-red/10 text-sb-red hover:bg-sb-red/20 transition-colors"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  התנתק
-                </button>
+                <>
+                  <Link to="/profile" className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-surface text-sb-light hover:bg-sb-border transition-colors">
+                    <User className="w-3.5 h-3.5" />
+                    פרופיל
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-red/10 text-sb-red hover:bg-sb-red/20 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    התנתק
+                  </button>
+                </>
               ) : (
                 <>
                   <Link to="/login" className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-red text-white hover:bg-sb-red-hover transition-colors">

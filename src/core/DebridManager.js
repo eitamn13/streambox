@@ -128,7 +128,11 @@ class DebridService {
   }
 
   async tbGetTorrents() {
-    return this.request('/torrents/mylist');
+    const res = await this.request('/torrents/mylist');
+    // TorBox returns { success: true, data: [...] } or directly [...]
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    return [];
   }
 
   async tbAddMagnet(magnet, seed = 1) {

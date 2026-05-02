@@ -92,12 +92,19 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-sb-gray text-sm mt-6">
-          אין לך חשבון?{' '}
-          <Link to="/signup" className="text-sb-red hover:text-sb-red-hover font-semibold transition-colors">
-            הירשם
-          </Link>
-        </p>
+        <div className="text-center mt-6 space-y-2">
+          <p className="text-sb-gray text-sm">
+            <Link to="/reset-password" className="text-sb-light hover:text-white transition-colors">
+              שכחת סיסמה?
+            </Link>
+          </p>
+          <p className="text-sb-gray text-sm">
+            אין לך חשבון?{' '}
+            <Link to="/signup" className="text-sb-red hover:text-sb-red-hover font-semibold transition-colors">
+              הירשם
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

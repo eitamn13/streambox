@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { registerBuiltInPlugins } from '../plugins/BuiltInPlugins.js';
 import { AppProvider } from '../contexts/AppContext.jsx';
 import { I18nProvider } from '../i18n/index.jsx';
+import ProtectedRoute from './ProtectedRoute.jsx';
 import Layout from './Layout.jsx';
 import Home from './Home.jsx';
 import Discover from './Discover.jsx';
@@ -14,6 +15,8 @@ import Addons from './Addons.jsx';
 import Services from './Services.jsx';
 import Login from '../pages/Login.jsx';
 import Signup from '../pages/Signup.jsx';
+import ResetPassword from '../pages/ResetPassword.jsx';
+import Profile from '../pages/Profile.jsx';
 import NotFound from './NotFound.jsx';
 
 registerBuiltInPlugins();
@@ -28,6 +31,7 @@ function StreamBoxApp() {
               <Route path="/player/:type/:id" element={<Player />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route element={<Layout />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/discover" element={<Discover />} />
@@ -37,6 +41,7 @@ function StreamBoxApp() {
                 <Route path="/addons" element={<Addons />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>
