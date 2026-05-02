@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, Tv, Menu, Zap, User } from 'lucide-react';
+import { Search, X, Tv, Crown, User } from 'lucide-react';
+import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 
 function TopBar() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ function TopBar() {
   const [query, setQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const inputRef = useRef(null);
+  const { isPremium } = useSubscription();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -40,7 +42,7 @@ function TopBar() {
     { path: '/', label: 'בית' },
     { path: '/discover', label: 'גלה' },
     { path: '/library', label: 'ספרייה' },
-    { path: '/services', label: 'Debrid' },
+    { path: '/subscription', label: 'מנוי' },
   ];
 
   return (
@@ -55,6 +57,12 @@ function TopBar() {
             <Tv className="w-4.5 h-4.5 text-white" />
           </div>
           <span className="text-xl font-bold text-white tracking-tight hidden sm:block">StreamBox</span>
+          {isPremium && (
+            <span className="hidden sm:inline-flex items-center gap-1 bg-sb-purple text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+              <Crown className="w-3 h-3" />
+              פרימיום
+            </span>
+          )}
         </Link>
 
         {/* Desktop Nav */}

@@ -8,18 +8,21 @@ import {
   COMPLIANCE_MODES,
   SOURCE_LABELS,
 } from '../core/ContentClassifier.js';
-import { DEBRID_SERVICES } from '../core/DebridManager.js';
+import { DEBRID_SERVICES, getConfiguredDebrids } from '../core/DebridManager.js';
 import { useApp } from '../contexts/AppContext.jsx';
+import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { useTranslation } from '../i18n/index.jsx';
 import { supabase } from '../lib/supabase.js';
 import {
   Tv, Trash2, RefreshCw, Info, Puzzle, Shield, Lock,
   MonitorPlay, ChevronLeft, Check, Key, Globe, AlertTriangle,
-  Languages, User, LogOut, LogIn, UserPlus, Settings as Cog
+  Languages, User, LogOut, LogIn, UserPlus, Settings as Cog,
+  Crown, CreditCard
 } from 'lucide-react';
 
 function Settings() {
   const { session, setSession, profiles, activeProfile, setActiveProfile, createProfile, deleteProfile } = useApp();
+  const { isPremium, planInfo, customerKey } = useSubscription();
   const { t, lang, setLang, supportedLanguages } = useTranslation();
   const [cleared, setCleared] = useState(false);
   const [activeSection, setActiveSection] = useState('general');
@@ -87,12 +90,16 @@ function Settings() {
           desc: session ? 'מחובר למערכת' : 'התחבר או הירשם כדי לסנכרן את ההעדפות שלך',
           type: 'custom',
           render: () => (
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {session ? (
                 <>
                   <Link to="/profile" className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-surface text-sb-light hover:bg-sb-border transition-colors">
                     <User className="w-3.5 h-3.5" />
                     פרופיל
+                  </Link>
+                  <Link to="/subscription" className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-purple/20 text-sb-purple hover:bg-sb-purple/30 transition-colors">
+                    <Crown className="w-3.5 h-3.5" />
+                    {isPremium ? 'פרימיום' : 'שדרג מנוי'}
                   </Link>
                   <button
                     onClick={handleLogout}
@@ -114,6 +121,22 @@ function Settings() {
                   </Link>
                 </>
               )}
+            </div>
+          ),
+        },
+        {
+          title: 'מנוי',
+          desc: isPremium ? `מנוי פרימיום פעיל - ${planInfo.price} ₪/חודש` : 'מנוי חינם - 3 סרטים ביום, עד 720p',
+          type: 'custom',
+          render: () => (
+            <div className="mt-3">
+              <Link
+                to="/subscription"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-sb-purple text-white hover:bg-sb-purple/80 transition-colors"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                {isPremium ? 'נהל מנוי' : 'שדרג לפרימיום'}
+              </Link>
             </div>
           ),
         },
@@ -308,10 +331,20 @@ function Settings() {
       items: [
         {
           title: 'שירותי Debrid',
-          desc: 'חבר את חשבונות ה-Debrid שלך לקבלת זרמים איכותיים יותר. המפתחות נשמרים מקומית במכשירך בלבד.',
+          desc: customerKey
+            ? 'מצב SaaS פעיל - ה-admin מנהל את המפתחות. אין צורך בהגדרה.'
+            : 'חבר את חשבונות ה-Debrid שלך לקבלת זרמים איכותיים יותר. המפתחות נשמרים מקומית במכשירך בלבד.',
           type: 'custom',
           render: () => (
             <div className="space-y-3 mt-3">
+              {customerKey && (
+                <div className="bg-sb-green/10 border border-sb-green/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-sb-green text-sm">
+                    <Check className="w-4 h-4" />
+                    <span>מצב SaaS פעיל - Real-Debrid מנוהל על ידי המערכת</span>
+                  </div>
+                </div>
+              )}
               {debridKeys.map(svc => (
                 <div key={svc.id} className="bg-sb-surface rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">

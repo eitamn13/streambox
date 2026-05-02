@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getContentDetails } from '../core/StreamBoxCore.js';
 import { fetchStreams } from '../core/StreamEngine.js';
-import { searchYtsMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
+import { searchMagnets, addMagnetToRd, getConfiguredDebrids } from '../core/DebridManager.js';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/History.js';
+import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import {
   Play, Star, Clock, Calendar, ExternalLink, Film, Bookmark, BookmarkCheck,
   MonitorPlay, Loader2, ChevronLeft, Users, Globe, Award, Search, Magnet,
-  AlertCircle, CheckCircle
+  AlertCircle, CheckCircle, Crown
 } from 'lucide-react';
 
 function Detail() {
   const { type, id } = useParams();
+  const { isPremium, watchCheck, filterStreams, recordWatch } = useSubscription();
   const [data, setData] = useState(null);
   const [streams, setStreams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ function Detail() {
         const streamResults = await fetchStreams(id, type, details?.title, details?.year);
         if (!cancelled) {
           setData(details);
-          setStreams(streamResults);
+          setStreams(filterStreams(streamResults));
           setInWatchlist(isInWatchlist(id, type));
         }
       } catch (_err) {
@@ -52,7 +54,7 @@ function Detail() {
     }
     load();
     return () => { cancelled = true };
-  }, [type, id]);
+  }, [type, id, filterStreams]);
 
   const toggleWatchlist = () => {
     if (inWatchlist) {
@@ -69,22 +71,30 @@ function Detail() {
     setMagnetResults([]);
     setAddError(null);
     try {
-      const results = await searchYtsMagnets(data.title, data.year);
+      const results = await searchMagnets(data.title, data.year, data.imdbId, type);
       setMagnetResults(results);
     } catch (e) {
-      setAddError('חיפוש המגנטים נכשל');
+      setAddError('חיפוש המקורות נכשל');
     } finally {
       setSearchingMagnets(false);
     }
   };
 
   const handleAddMagnet = async (magnet, title) => {
+    const check = watchCheck();
+    if (!check.allowed) {
+      setAddError(check.reason);
+      return;
+    }
+
     setAddingMagnet(true);
     setAddError(null);
     try {
       const results = await addMagnetToRd(magnet, title);
       if (results.length > 0) {
-        setStreams(prev => [...prev, ...results]);
+        const filtered = filterStreams(results);
+        setStreams(prev => [...prev, ...filtered]);
+        if (filtered.length > 0) recordWatch();
         setShowMagnetPanel(false);
         setMagnetResults([]);
       } else {
@@ -198,6 +208,16 @@ function Detail() {
               ))}
             </div>
 
+            {/* Free plan notice */}
+            {!isPremium && (
+              <div className="bg-sb-purple/10 border border-sb-purple/20 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2 text-sb-purple text-sm">
+                  <Crown className="w-4 h-4" />
+                  <span>מנוי חינם - 3 סרטים ביום, עד 720p. <Link to="/subscription" className="underline hover:text-white">שדרג לפרימיום</Link></span>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-3 mb-8">
               {hasStreams ? (
                 <Link
@@ -214,7 +234,7 @@ function Detail() {
                   className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {searchingMagnets ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                  חפש מגנט
+                  חפש מקור
                 </button>
               )}
               <button
@@ -272,7 +292,7 @@ function Detail() {
                     className="flex items-center gap-2 mt-3 text-sm text-sb-red hover:underline"
                   >
                     <Search className="w-4 h-4" />
-                    חפש והוסף מגנט
+                    חפש והוסף מקור
                   </button>
                 </div>
               )}
@@ -309,7 +329,7 @@ function Detail() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white font-semibold flex items-center gap-2">
                     <Magnet className="w-4 h-4 text-sb-red" />
-                    הוספת מגנט
+                    הוספת מקור
                   </h3>
                   <button onClick={() => setShowMagnetPanel(false)} className="text-sb-gray hover:text-white">✕</button>
                 </div>
@@ -332,37 +352,50 @@ function Detail() {
                   </button>
                 </div>
 
-                {/* YTS Results */}
+                {/* Search Results */}
                 {magnetResults.length > 0 && (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     <p className="text-sb-light text-sm font-medium">תוצאות חיפוש:</p>
-                    {magnetResults.map((m, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleAddMagnet(m.magnet, m.title)}
-                        disabled={addingMagnet}
-                        className="w-full text-right bg-sb-surface hover:bg-sb-border rounded-lg p-3 transition-colors disabled:opacity-50"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm truncate">{m.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-sb-green text-xs font-bold">{m.quality}</span>
-                              <span className="text-sb-gray text-xs">{m.size}</span>
-                              <span className="text-sb-gray text-xs">S: {m.seeds}</span>
+                    {magnetResults.map((m, i) => {
+                      const locked = !isPremium && (m.quality === '4K' || m.quality === '1080p');
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => !locked && handleAddMagnet(m.magnet, m.title)}
+                          disabled={addingMagnet || locked}
+                          className={`w-full text-right rounded-lg p-3 transition-colors disabled:opacity-50 ${
+                            locked ? 'bg-sb-surface/50 border border-sb-purple/20' : 'bg-sb-surface hover:bg-sb-border'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm truncate">{m.title}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-sb-green text-xs font-bold">{m.quality}</span>
+                                <span className="text-sb-gray text-xs">{m.size}</span>
+                                <span className="text-sb-gray text-xs">S: {m.seeds}</span>
+                                <span className="text-sb-gray text-xs">{m.provider}</span>
+                              </div>
                             </div>
+                            {locked ? (
+                              <Crown className="w-4 h-4 text-sb-purple shrink-0 mr-2" />
+                            ) : (
+                              <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
+                            )}
                           </div>
-                          <Magnet className="w-4 h-4 text-sb-red shrink-0 mr-2" />
-                        </div>
-                      </button>
-                    ))}
+                          {locked && (
+                            <p className="text-sb-purple text-xs mt-1">נדרש מנוי פרימיום לאיכות זו</p>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
                 {searchingMagnets && (
                   <div className="flex items-center gap-2 text-sb-gray py-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    מחפש מגנטים...
+                    מחפש מקורות...
                   </div>
                 )}
 

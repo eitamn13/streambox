@@ -1,15 +1,17 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Compass, Search, Library, Zap } from 'lucide-react';
+import { Home, Compass, Search, Library, Crown } from 'lucide-react';
+import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 
 function BottomNav() {
   const location = useLocation();
+  const { isPremium } = useSubscription();
 
   const tabs = [
     { path: '/', label: 'בית', icon: Home },
     { path: '/discover', label: 'גלה', icon: Compass },
     { path: '/search', label: 'חיפוש', icon: Search },
     { path: '/library', label: 'ספרייה', icon: Library },
-    { path: '/services', label: 'Debrid', icon: Zap },
+    { path: '/subscription', label: 'מנוי', icon: Crown, highlight: !isPremium },
   ];
 
   return (
@@ -22,7 +24,7 @@ function BottomNav() {
               key={tab.path}
               to={tab.path}
               className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
-                active ? 'text-sb-red' : 'text-sb-gray'
+                active ? 'text-sb-red' : tab.highlight ? 'text-sb-purple' : 'text-sb-gray'
               }`}
             >
               <tab.icon className={`w-5 h-5 ${active ? 'stroke-[2.5px]' : 'stroke-2'}`} />

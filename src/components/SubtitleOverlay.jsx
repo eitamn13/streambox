@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchSubtitles, loadSubtitleTrack, LANGUAGE_NAMES } from '../core/SubtitleEngine.js';
 import { Subtitles, Clock, X, Loader2, Languages } from 'lucide-react';
 
-function SubtitleOverlay({ id, type, imdbId, title, videoRef, onClose }) {
-  const [subs, setSubs] = useState([]);
-  const [loading, setLoading] = useState(true);
+function SubtitleOverlay({ id, type, imdbId, title, videoRef, onClose, preloadedSubs = [] }) {
+  const [subs, setSubs] = useState(preloadedSubs);
+  const [loading, setLoading] = useState(preloadedSubs.length === 0);
   const [selectedLang, setSelectedLang] = useState('all');
   const [activeTrack, setActiveTrack] = useState(null);
   const [offset, setOffset] = useState(0);
@@ -12,6 +12,12 @@ function SubtitleOverlay({ id, type, imdbId, title, videoRef, onClose }) {
   const trackRef = useRef(null);
 
   useEffect(() => {
+    if (preloadedSubs.length > 0) {
+      setSubs(preloadedSubs);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -26,7 +32,7 @@ function SubtitleOverlay({ id, type, imdbId, title, videoRef, onClose }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [id, type]);
+  }, [id, type, preloadedSubs, imdbId, title]);
 
   const languages = ['all', ...Array.from(new Set(subs.map(s => s.lang)))];
   const filtered = selectedLang === 'all' ? subs : subs.filter(s => s.lang === selectedLang);

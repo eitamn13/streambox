@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import { supabase } from '../lib/supabase';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
@@ -7,6 +7,9 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
 export default function Login() {
   const { setSession } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -23,7 +26,7 @@ export default function Login() {
       setError(error.message);
     } else {
       setSession(data.session);
-      navigate('/');
+      navigate(redirectTo);
     }
   };
 
@@ -100,7 +103,7 @@ export default function Login() {
           </p>
           <p className="text-sb-gray text-sm">
             אין לך חשבון?{' '}
-            <Link to="/signup" className="text-sb-red hover:text-sb-red-hover font-semibold transition-colors">
+            <Link to={`/signup${redirectTo !== '/' ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`} className="text-sb-red hover:text-sb-red-hover font-semibold transition-colors">
               הירשם
             </Link>
           </p>

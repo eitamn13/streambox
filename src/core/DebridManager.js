@@ -1,5 +1,8 @@
 // Debrid Manager - Real-Debrid, Premiumize, TorBox integration
+// + Multi-provider torrent search + SaaS customer key support
 // =============================================================
+
+import { getCustomerKey } from './SubscriptionManager.js';
 
 const STORAGE_KEYS = {
   realdebrid: 'sb_debrid_rd',
@@ -31,19 +34,35 @@ class DebridService {
   }
 
   isConfigured() {
+    // In SaaS mode, customer key replaces individual debrid keys
+    if (getCustomerKey()) return true;
     return !!this.getApiKey();
   }
 
   // Generic proxy request
   async request(endpoint, options = {}) {
-    const apiKey = this.getApiKey();
-    if (!apiKey) throw new Error('API key not configured');
+    const customerKey = getCustomerKey();
+    const userApiKey = this.getApiKey();
+    
+    if (!customerKey && !userApiKey) {
+      throw new Error('API key not configured');
+    }
 
     const url = `/api/debrid?service=${this.serviceCode}&path=${encodeURIComponent(endpoint)}`;
+    const headers = { 'Content-Type': 'application/json' };
+    
+    if (customerKey) {
+      headers['X-Customer-Key'] = customerKey;
+    } else {
+      headers['X-Debrid-Key'] = userApiKey;
+    }
+
+    const body = options.body ? JSON.stringify({ ...options.body, ...(userApiKey ? { apiKey: userApiKey } : {}) }) : undefined;
+
     const res = await fetch(url, {
       method: options.method || 'GET',
-      headers: { 'Content-Type': 'application/json', 'X-Debrid-Key': apiKey },
-      body: options.body ? JSON.stringify({ ...options.body, apiKey }) : undefined,
+      headers,
+      body,
     });
 
     const result = await res.json();
@@ -216,7 +235,19 @@ export async function testDebridConnection(serviceId) {
   }
 }
 
-// Resolve streams via debrid services
+// ============================================================================
+// STREAM RESOLUTION
+// ============================================================================
+
+function detectQuality(filename = '') {
+  const f = filename.toLowerCase();
+  if (f.includes('2160') || f.includes('4k') || f.includes('uhd')) return '4K';
+  if (f.includes('1080')) return '1080p';
+  if (f.includes('720')) return '720p';
+  if (f.includes('480')) return '480p';
+  return 'auto';
+}
+
 export async function resolveDebridStreams(magnetOrHash, filename = '') {
   const configured = getConfiguredDebrids();
   const results = [];
@@ -264,7 +295,6 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
       if (svc.id === 'premiumize') {
         const addRes = await svc.instance.pmAddMagnet(magnetOrHash);
         if (addRes?.status === 'success' && addRes.id) {
-          // Poll for completion (max 20s)
           for (let i = 0; i < 10; i++) {
             await new Promise(r => setTimeout(r, 2000));
             const transfers = await svc.instance.pmGetTransfers();
@@ -287,7 +317,7 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
                     }
                   }
                 }
-              } catch { /* ignore item details errors */ }
+              } catch { /* ignore */ }
               break;
             }
             if (transfer?.status === 'error') break;
@@ -299,7 +329,6 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
         const addRes = await svc.instance.tbAddMagnet(magnetOrHash);
         if (addRes?.success || addRes?.torrent_id) {
           const torrentId = addRes.torrent_id || addRes.data;
-          // Poll for completion (max 20s)
           for (let i = 0; i < 10; i++) {
             await new Promise(r => setTimeout(r, 2000));
             const torrents = await svc.instance.tbGetTorrents();
@@ -318,7 +347,7 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
                     info: ['Premium', torrent.name],
                   });
                 }
-              } catch { /* ignore download errors */ }
+              } catch { /* ignore */ }
               break;
             }
             if (torrent?.status === 'error') break;
@@ -334,19 +363,9 @@ export async function resolveDebridStreams(magnetOrHash, filename = '') {
 }
 
 // ============================================================================
-// NEW: Real-Debrid Library Search + Magnet Search + Auto-Add
+// REAL-DEBRID LIBRARY SEARCH
 // ============================================================================
 
-function detectQuality(filename = '') {
-  const f = filename.toLowerCase();
-  if (f.includes('2160') || f.includes('4k') || f.includes('uhd')) return '4K';
-  if (f.includes('1080')) return '1080p';
-  if (f.includes('720')) return '720p';
-  if (f.includes('480')) return '480p';
-  return 'auto';
-}
-
-// Search user's existing Real-Debrid torrents by title
 export async function searchRdLibrary(title) {
   if (!realDebrid.isConfigured()) return [];
   if (!title) return [];
@@ -389,11 +408,44 @@ export async function searchRdLibrary(title) {
   }
 }
 
-// Search YTS for magnets
-export async function searchYtsMagnets(title, year = '') {
+// ============================================================================
+// MULTI-PROVIDER MAGNET SEARCH
+// ============================================================================
+
+// TorrentAPI (ThePirateBay) - reliable server-side API
+async function searchTorrentAPI(query) {
   try {
-    const query = year ? `${title} ${year}` : title;
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(`https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=5`)}`;
+    const url = `https://apibay.org/q.php?q=${encodeURIComponent(query)}&cat=201`;
+    const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .filter(t => t.info_hash && t.name)
+      .map(t => ({
+        title: t.name,
+        year: '',
+        quality: detectQuality(t.name),
+        type: 'bluray',
+        size: formatBytes(parseInt(t.size) || 0),
+        magnet: `magnet:?xt=urn:btih:${t.info_hash}&dn=${encodeURIComponent(t.name)}&tr=udp://tracker.opentrackr.org:1337/announce`,
+        hash: t.info_hash,
+        seeds: parseInt(t.seeders) || 0,
+        peers: parseInt(t.leechers) || 0,
+        provider: 'TorrentAPI',
+      }));
+  } catch (e) {
+    console.warn('TorrentAPI search failed:', e);
+    return [];
+  }
+}
+
+// YTS - may be blocked but has great quality info
+async function searchYTS(query) {
+  try {
+    const url = `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=5`;
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
     const res = await fetch(proxyUrl);
     if (!res.ok) return [];
     const data = await res.json();
@@ -414,6 +466,7 @@ export async function searchYtsMagnets(title, year = '') {
           hash,
           seeds: torrent.seeds,
           peers: torrent.peers,
+          provider: 'YTS',
         });
       }
     }
@@ -424,7 +477,97 @@ export async function searchYtsMagnets(title, year = '') {
   }
 }
 
-// Add magnet to Real-Debrid with extended polling (up to 90s)
+// EZTV - for TV shows
+async function searchEZTV(imdbId) {
+  if (!imdbId) return [];
+  try {
+    const url = `https://eztv.re/api/get-torrents?limit=10&imdb_id=${imdbId.replace('tt', '')}`;
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const torrents = data.torrents || [];
+
+    return torrents.map(t => ({
+      title: t.title || t.filename || '',
+      year: '',
+      quality: detectQuality(t.filename || t.title || ''),
+      type: 'web',
+      size: formatBytes(parseInt(t.size_bytes) || 0),
+      magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title || '')}`,
+      hash: t.hash,
+      seeds: parseInt(t.seeds) || 0,
+      peers: parseInt(t.peers) || 0,
+      provider: 'EZTV',
+    }));
+  } catch (e) {
+    console.warn('EZTV search failed:', e);
+    return [];
+  }
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '?';
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) return `${gb.toFixed(2)} GB`;
+  const mb = bytes / (1024 ** 2);
+  return `${mb.toFixed(0)} MB`;
+}
+
+// Main search function - tries multiple providers
+export async function searchMagnets(title, year = '', imdbId = '', type = 'movie') {
+  const query = year ? `${title} ${year}` : title;
+  const allResults = [];
+
+  // Try YTS first for movies (best quality info)
+  if (type === 'movie') {
+    const ytsResults = await searchYTS(query);
+    allResults.push(...ytsResults);
+  }
+
+  // Try EZTV for TV shows
+  if (type === 'series' && imdbId) {
+    const eztvResults = await searchEZTV(imdbId);
+    allResults.push(...eztvResults);
+  }
+
+  // Fallback to TorrentAPI for everything
+  if (allResults.length === 0) {
+    const tpbResults = await searchTorrentAPI(query);
+    allResults.push(...tpbResults);
+  }
+
+  // Also always search TorrentAPI as supplement for movies
+  if (type === 'movie' && allResults.length < 3) {
+    const tpbResults = await searchTorrentAPI(query);
+    // Avoid duplicates by hash
+    const existingHashes = new Set(allResults.map(r => r.hash));
+    for (const r of tpbResults) {
+      if (!existingHashes.has(r.hash)) {
+        allResults.push(r);
+      }
+    }
+  }
+
+  // Sort by quality then seeds
+  const qualityOrder = { '4K': 4, '2160p': 4, '1080p': 3, '720p': 2, '480p': 1, 'auto': 0 };
+  return allResults.sort((a, b) => {
+    const qa = qualityOrder[a.quality] || 0;
+    const qb = qualityOrder[b.quality] || 0;
+    if (qa !== qb) return qb - qa;
+    return (b.seeds || 0) - (a.seeds || 0);
+  });
+}
+
+// Legacy alias
+export async function searchYtsMagnets(title, year = '') {
+  return searchMagnets(title, year, '', 'movie');
+}
+
+// ============================================================================
+// ADD MAGNET TO REAL-DEBRID WITH EXTENDED POLLING
+// ============================================================================
+
 export async function addMagnetToRd(magnet, filename = '') {
   if (!realDebrid.isConfigured()) throw new Error('Real-Debrid לא מחובר');
 

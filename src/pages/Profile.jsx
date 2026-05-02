@@ -1,20 +1,36 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
+import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { supabase } from '../lib/supabase';
 import {
   User, Mail, Calendar, LogOut, ChevronLeft, Loader2,
-  Save, CheckCircle, AlertCircle, KeyRound
+  Save, CheckCircle, AlertCircle, KeyRound, Crown,
+  RefreshCw, CreditCard
 } from 'lucide-react';
 
 export default function Profile() {
   const { session, setSession } = useApp();
+  const { subscription, isPremium, planInfo, refreshSubscription, customerKey } = useSubscription();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const user = session?.user;
 
   const [name, setName] = useState(user?.user_metadata?.full_name || '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Handle checkout success
+  useEffect(() => {
+    if (searchParams.get('checkout') === 'success') {
+      setMessage('התשלום בוצע בהצלחה! המנוי שלך מתעדכן...');
+      refreshSubscription().then(() => {
+        setMessage('המנוי עודכן בהצלחה!');
+      });
+    }
+  }, [searchParams, refreshSubscription]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -30,6 +46,12 @@ export default function Profile() {
       setMessage('הפרופיל עודכן בהצלחה');
       setSession((prev) => ({ ...prev, user: data.user }));
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSubscription();
+    setRefreshing(false);
   };
 
   const handleLogout = async () => {
@@ -56,6 +78,73 @@ export default function Profile() {
           </div>
           <h2 className="text-white font-semibold">{user?.user_metadata?.full_name || 'משתמש'}</h2>
           <p className="text-sb-gray text-sm">{user?.email}</p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            {isPremium ? (
+              <span className="inline-flex items-center gap-1 bg-sb-purple/20 text-sb-purple text-xs font-bold px-3 py-1 rounded-full">
+                <Crown className="w-3 h-3" />
+                פרימיום
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 bg-sb-surface text-sb-gray text-xs px-3 py-1 rounded-full">
+                חינם
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Subscription Card */}
+        <div className="bg-sb-card rounded-2xl p-6 mb-4 border border-sb-border">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-sb-purple" />
+              מנוי
+            </h3>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="text-sb-gray hover:text-white transition-colors"
+              title="רענן מצב מנוי"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-sb-gray">תוכנית</span>
+              <span className="text-white font-medium">{planInfo.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sb-gray">סטטוס</span>
+              <span className={subscription?.status === 'active' ? 'text-sb-green' : 'text-sb-gray'}>
+                {subscription?.status === 'active' ? 'פעיל' : subscription?.status || 'פעיל'}
+              </span>
+            </div>
+            {subscription?.current_period_end && (
+              <div className="flex justify-between">
+                <span className="text-sb-gray">תקף עד</span>
+                <span className="text-white">
+                  {new Date(subscription.current_period_end).toLocaleDateString('he-IL')}
+                </span>
+              </div>
+            )}
+            {customerKey && (
+              <div className="flex justify-between">
+                <span className="text-sb-gray">מפתח לקוח</span>
+                <span className="text-sb-gray font-mono text-xs">{customerKey.slice(0, 8)}...</span>
+              </div>
+            )}
+          </div>
+
+          {!isPremium && (
+            <Link
+              to="/subscription"
+              className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-sb-purple hover:bg-sb-purple/80 text-white rounded-xl text-sm font-bold transition-colors"
+            >
+              <Crown className="w-4 h-4" />
+              שדרג לפרימיום
+            </Link>
+          )}
         </div>
 
         {/* Alerts */}
