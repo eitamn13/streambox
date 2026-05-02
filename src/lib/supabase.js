@@ -86,6 +86,17 @@ function createMockClient() {
   };
 }
 
-export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+function isValidSupabaseConfig(url, key) {
+  if (!url || !key) return false;
+  if (url.includes('your_') || key.includes('your_')) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export const supabase = isValidSupabaseConfig(SUPABASE_URL, SUPABASE_ANON_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : createMockClient();
