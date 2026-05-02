@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
-import { supabase } from '../lib/supabase';
+import { supabase, setAuthToken } from '../lib/supabase';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
 
 export default function Login() {
@@ -26,6 +26,7 @@ export default function Login() {
       setError(error.message);
     } else {
       setSession(data.session);
+      if (data.session?.access_token) setAuthToken(data.session.access_token);
       navigate(redirectTo);
     }
   };

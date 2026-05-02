@@ -2,7 +2,7 @@
 // ================================================================
 
 import { pluginRegistry } from './PluginRegistry.js';
-import { supabase } from '../lib/supabase.js';
+import { getAuthToken } from '../lib/supabase.js';
 
 const TMDB_IMG = 'https://image.tmdb.org/t/p';
 
@@ -34,8 +34,7 @@ export async function fetchStreams(id, type, title = '', year = '', imdbId = '',
     // Get auth token if logged in
     let authToken = '';
     try {
-      const { data } = await supabase.auth.getSession();
-      authToken = data.session?.access_token || '';
+      authToken = await getAuthToken();
     } catch { /* not logged in */ }
     const headers = {};
     if (authToken) {

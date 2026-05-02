@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, getAuthToken } from '../lib/supabase';
 import {
   fetchSubscription,
   getCustomerKey,
@@ -35,7 +35,7 @@ export function SubscriptionProvider({ children }) {
     async function load() {
       setLoading(true);
       try {
-        const token = session?.access_token;
+        const token = session?.access_token || await getAuthToken();
         const sub = await fetchSubscription(token);
         if (!cancelled) {
           setSubscription(sub);
@@ -52,7 +52,7 @@ export function SubscriptionProvider({ children }) {
   }, [session]);
 
   const refreshSubscription = useCallback(async () => {
-    const token = session?.access_token;
+    const token = session?.access_token || await getAuthToken();
     const sub = await fetchSubscription(token);
     setSubscription(sub);
     if (sub?.customer_key) setCustomerKey(sub.customer_key);

@@ -28,6 +28,7 @@ function createMockClient() {
           user: { id: user.id, email: user.email, user_metadata: user.user_metadata }
         };
         localStorage.setItem('sb-session', JSON.stringify(session));
+        localStorage.setItem(TOKEN_KEY, session.access_token);
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
       },
@@ -50,11 +51,13 @@ function createMockClient() {
           user: { id: newUser.id, email: newUser.email, user_metadata: newUser.user_metadata }
         };
         localStorage.setItem('sb-session', JSON.stringify(session));
+        localStorage.setItem(TOKEN_KEY, session.access_token);
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
       },
       signOut: async () => {
         localStorage.removeItem('sb-session');
+        localStorage.removeItem(TOKEN_KEY);
         notify('SIGNED_OUT', null);
         return { error: null };
       },
@@ -106,3 +109,33 @@ function isValidSupabaseConfig(url, key) {
 export const supabase = isValidSupabaseConfig(SUPABASE_URL, SUPABASE_ANON_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : createMockClient();
+
+// ------------------------------------------------------------------
+// Token helpers — explicit localStorage + Supabase fallback
+// ------------------------------------------------------------------
+const TOKEN_KEY = 'sb-token';
+
+export function setAuthToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  } catch { return ''; }
+}
+
+/** Get auth token: explicit localStorage first, then Supabase session */
+export async function getAuthToken() {
+  const explicit = getStoredToken();
+  if (explicit) return explicit;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || '';
+  } catch { return ''; }
+}

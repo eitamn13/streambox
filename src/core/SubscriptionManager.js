@@ -58,14 +58,17 @@ export function clearCustomerKey() {
   localStorage.removeItem(STORAGE_KEYS.customerKey);
 }
 
+import { getAuthToken } from '../lib/supabase.js';
+
 // Fetch subscription from server
 export async function fetchSubscription(authToken) {
-  if (!authToken) {
+  const token = authToken || await getAuthToken();
+  if (!token) {
     return { plan: 'free', status: 'none', is_premium: false };
   }
   try {
     const res = await fetch('/api/subscription', {
-      headers: { 'Authorization': `Bearer ${authToken}` },
+      headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
