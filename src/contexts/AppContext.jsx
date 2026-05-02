@@ -63,7 +63,20 @@ export function AppProvider({ children }) {
       if (newSession?.access_token) setAuthToken(newSession.access_token);
       else if (!newSession) setAuthToken(null);
     });
-    return () => listener?.subscription?.unsubscribe();
+    // Periodic token sync — ensures sb-token stays in sync even if something clears it
+    const syncInterval = setInterval(() => {
+      supabase.auth.getSession().then(({ data }) => {
+        const token = data.session?.access_token;
+        if (token && !localStorage.getItem('sb-token')) {
+          console.log('[AppContext] Re-syncing missing sb-token');
+          setAuthToken(token);
+        }
+      });
+    }, 5000);
+    return () => {
+      listener?.subscription?.unsubscribe();
+      clearInterval(syncInterval);
+    };
   }, []);
 
   // Persist to localStorage

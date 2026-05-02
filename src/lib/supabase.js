@@ -152,6 +152,22 @@ export async function getAuthToken() {
       setAuthToken(realToken);
       return realToken;
     }
+  } catch (e) { console.warn('[getAuthToken] getSession failed:', e?.message || e); }
+  // Last resort: check Supabase's native storage key directly
+  try {
+    const projectRef = SUPABASE_URL?.match(/\/\/([^.]+)\.supabase\.co/)?.[1];
+    if (projectRef) {
+      const nativeKey = `sb-${projectRef}-auth-token`;
+      const nativeRaw = localStorage.getItem(nativeKey);
+      if (nativeRaw) {
+        const nativeSession = JSON.parse(nativeRaw);
+        const nativeToken = nativeSession?.access_token || nativeSession?.[0]?.access_token;
+        if (nativeToken && !nativeToken.startsWith('mock_')) {
+          setAuthToken(nativeToken);
+          return nativeToken;
+        }
+      }
+    }
   } catch { /* ignore */ }
   return '';
 }
