@@ -42,7 +42,36 @@ function createSubtitleBlob(vttContent) {
   return URL.createObjectURL(blob);
 }
 
-export async function fetchSubtitles({ imdb_id, tmdb_id, query, lang = 'heb,eng' }) {
+export async function fetchSubtitles({ imdb_id, tmdb_id, query, lang = 'heb,eng', type = 'movie', season = null, episode = null }) {
+  const results = [];
+
+  // 1. Try Wizdom Hebrew subtitles (fast, dedicated Hebrew source)
+  if (imdb_id) {
+    try {
+      const wizdomType = type === 'tv' || type === 'series' ? 'series' : 'movie';
+      const wizdomId = wizdomType === 'series' && season && episode
+        ? `${imdb_id}:${season}:${episode}`
+        : imdb_id;
+      const wizdomUrl = `https://4b139a4b7f94-wizdom-stremio-v2.baby-beamup.club/subtitles/${wizdomType}/${wizdomId}.json`;
+      const res = await fetch(wizdomUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const subs = (data.subtitles || []).map(s => ({
+          url: s.url,
+          lang: s.lang === 'heb' ? 'he' : s.lang,
+          label: `עברית — ${s.id?.replace(/\[WIZDOM\]/, '') || 'Wizdom'}`,
+          provider: 'Wizdom',
+          rating: 10,
+          downloads: 9999,
+        }));
+        results.push(...subs);
+      }
+    } catch (e) {
+      console.warn('Wizdom fetch failed:', e);
+    }
+  }
+
+  // 2. Fallback to backend subtitle API (OpenSubtitles, etc.)
   try {
     const params = new URLSearchParams();
     if (imdb_id) params.set('imdb_id', imdb_id);
@@ -51,20 +80,31 @@ export async function fetchSubtitles({ imdb_id, tmdb_id, query, lang = 'heb,eng'
     params.set('lang', lang);
 
     const res = await fetch(`/api/subtitles?${params.toString()}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.subtitles || []).map(s => ({
-      url: s.url,
-      lang: s.lang || 'und',
-      label: s.label || s.lang || 'Subtitle',
-      provider: s.provider || 'OpenSubtitles',
-      rating: s.rating || 0,
-      downloads: s.downloads || 0,
-    }));
+    if (res.ok) {
+      const data = await res.json();
+      const subs = (data.subtitles || []).map(s => ({
+        url: s.url,
+        lang: s.lang || 'und',
+        label: s.label || s.lang || 'Subtitle',
+        provider: s.provider || 'OpenSubtitles',
+        rating: s.rating || 0,
+        downloads: s.downloads || 0,
+      }));
+      results.push(...subs);
+    }
   } catch (e) {
-    console.warn('Subtitle fetch failed:', e);
-    return [];
+    console.warn('Backend subtitle fetch failed:', e);
   }
+
+  // Sort: Hebrew first, then English, then others
+  const langPriority = { he: 0, heb: 0, en: 1, eng: 1 };
+  results.sort((a, b) => {
+    const pa = langPriority[a.lang] ?? 2;
+    const pb = langPriority[b.lang] ?? 2;
+    return pa - pb;
+  });
+
+  return results;
 }
 
 export async function loadSubtitleTrack(subUrl, offsetSeconds = 0) {

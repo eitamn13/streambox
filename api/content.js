@@ -50,30 +50,23 @@ function detectQuality(filename = '') {
 // ------------------------------------------------------------------
 async function isAdminUser(supabase, user) {
   if (!user) return false;
-  // 1. Check subscriptions table
   try {
     const { data, error } = await supabase
       .from('subscriptions')
       .select('is_admin')
       .eq('user_id', user.id)
       .single();
-    console.log('[content] subscriptions is_admin:', { userId: user.id, data, error: error?.message || null });
     if (data?.is_admin) return true;
-  } catch (e) { console.log('[content] subscriptions check error:', e.message); }
-  // 2. Check users table as fallback
+  } catch (e) { /* ignore */ }
   try {
     const { data, error } = await supabase
       .from('users')
       .select('is_admin')
       .eq('id', user.id)
       .single();
-    console.log('[content] users is_admin:', { userId: user.id, data, error: error?.message || null });
     if (data?.is_admin) return true;
-  } catch (e) { console.log('[content] users check error:', e.message); }
-  // 3. Fallback: email contains 'admin'
-  const emailAdmin = user.email?.includes('admin') || false;
-  console.log('[content] email admin check:', user.email, emailAdmin);
-  return emailAdmin;
+  } catch (e) { /* ignore */ }
+  return user.email?.includes('admin') || false;
 }
 
 // ------------------------------------------------------------------
@@ -81,7 +74,6 @@ async function isAdminUser(supabase, user) {
 // ------------------------------------------------------------------
 async function checkSubscription(req) {
   const authHeader = req.headers.authorization;
-  console.log('[content] Auth header:', authHeader ? `${authHeader.slice(0, 20)}...` : 'MISSING');
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, plan: 'free', status: 'none', reason: 'לא מחובר' };
   }
@@ -89,20 +81,16 @@ async function checkSubscription(req) {
   const token = authHeader.slice(7);
   const supabase = getSupabase();
   if (!supabase) {
-    console.log('[content] Dev fallback — no Supabase config');
     return { ok: true, plan: 'premium', status: 'active' }; // Dev fallback
   }
 
   try {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-    console.log('[content] Auth result:', { userId: user?.id, email: user?.email, authErr: authErr?.message || null });
     if (authErr || !user) {
       return { ok: false, plan: 'free', status: 'none', reason: 'סשן לא תקין' };
     }
 
-    // Admin gets premium automatically — no Stripe needed
     const isAdmin = await isAdminUser(supabase, user);
-    console.log('[content] isAdmin result:', isAdmin);
     if (isAdmin) {
       return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
     }
@@ -112,18 +100,10 @@ async function checkSubscription(req) {
       .select('plan, status, current_period_end')
       .eq('user_id', user.id)
       .single();
-    console.log('[content] Subscription query:', { sub: sub || null, error: subError?.message || null, code: subError?.code || null });
 
-    // If no subscription row found, check users table for admin flag (same as subscription API)
     if (!sub && subError?.code === 'PGRST116') {
-      console.log('[content] No subscription row, checking users table for admin');
       try {
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single();
-        console.log('[content] Users table admin check:', userRow);
+        const { data: userRow } = await supabase.from('users').select('is_admin').eq('id', user.id).single();
         if (userRow?.is_admin) {
           return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
         }
@@ -137,13 +117,12 @@ async function checkSubscription(req) {
 
     return { ok: true, plan: sub.plan, status: sub.status, userId: user.id };
   } catch (e) {
-    console.warn('[content] Auth error:', e.message);
     return { ok: false, plan: 'free', status: 'none', reason: 'שגיאת אימות' };
   }
 }
 
 // ------------------------------------------------------------------
-// Torrent search — Torrentio + YTS (fast, 10s timeout each)
+// Torrent search — Torrentio + YTS (fast, 5s timeout each)
 // ------------------------------------------------------------------
 async function searchTorrentio(imdbId, type, season, episode) {
   if (!imdbId) return [];
@@ -153,7 +132,7 @@ async function searchTorrentio(imdbId, type, season, episode) {
     : `https://torrentio.strem.fun/stream/movie/${cleanId}.json`;
 
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(10000) });
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(5000) });
     if (!res.ok) return [];
     const data = await res.json();
     return (data.streams || [])
@@ -169,7 +148,6 @@ async function searchTorrentio(imdbId, type, season, episode) {
         };
       });
   } catch (e) {
-    console.warn('[content] Torrentio failed:', e.message);
     return [];
   }
 }
@@ -179,11 +157,10 @@ async function searchYts(imdbId) {
   const cleanId = imdbId.toString().startsWith('tt') ? imdbId : `tt${imdbId}`;
   const mirrors = [
     `https://yts.mx/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
-    `https://yts.lt/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
   ];
   for (const url of mirrors) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(8000) });
+      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(5000) });
       if (!res.ok) continue;
       const data = await res.json();
       const movies = data?.data?.movies || [];
@@ -208,14 +185,14 @@ async function searchYts(imdbId) {
 }
 
 // ------------------------------------------------------------------
-// Real-Debrid — instant availability + stream (max 10s total)
+// Real-Debrid — instant availability + stream (max 5s total)
 // ------------------------------------------------------------------
 async function checkRDAvailability(infoHash) {
   if (!ADMIN_RD_KEY) return false;
   try {
     const res = await fetch(
       `https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/${infoHash}`,
-      { headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` }, signal: timeoutSignal(6000) }
+      { headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` }, signal: timeoutSignal(4000) }
     );
     if (!res.ok) return false;
     const data = await res.json();
@@ -234,19 +211,19 @@ async function getRDStream(infoHash, title) {
       method: 'POST',
       headers,
       body: new URLSearchParams({ magnet }).toString(),
-      signal: timeoutSignal(8000),
+      signal: timeoutSignal(4000),
     });
     if (!addRes.ok) return null;
     const addData = await addRes.json();
     if (!addData.id) return null;
 
     const torrentId = addData.id;
-    // Max 5 poll attempts = 5 seconds (was 60!)
-    for (let i = 0; i < 5; i++) {
+    // Max 3 poll attempts = 3 seconds
+    for (let i = 0; i < 3; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const infoRes = await fetch(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`, {
         headers: { Authorization: `Bearer ${ADMIN_RD_KEY}` },
-        signal: timeoutSignal(6000),
+        signal: timeoutSignal(4000),
       });
       if (!infoRes.ok) continue;
       const info = await infoRes.json();
@@ -255,7 +232,7 @@ async function getRDStream(infoHash, title) {
         await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
           method: 'POST', headers,
           body: new URLSearchParams({ files: 'all' }).toString(),
-          signal: timeoutSignal(6000),
+          signal: timeoutSignal(4000),
         });
       }
 
@@ -266,7 +243,7 @@ async function getRDStream(infoHash, title) {
             const unres = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
               method: 'POST', headers,
               body: new URLSearchParams({ link }).toString(),
-              signal: timeoutSignal(6000),
+              signal: timeoutSignal(4000),
             });
             if (!unres.ok) continue;
             const unresData = await unres.json();
@@ -286,30 +263,28 @@ async function getRDStream(infoHash, title) {
 }
 
 // ------------------------------------------------------------------
-// Premiumize — transfer + stream (max 8s total)
+// Premiumize — transfer + stream (max 5s total)
 // ------------------------------------------------------------------
 async function getPMStream(infoHash, title) {
   if (!ADMIN_PM_KEY) return null;
   const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title)}`;
 
   try {
-    // Create transfer
     const createRes = await fetch('https://www.premiumize.me/api/transfer/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ apikey: ADMIN_PM_KEY, src: magnet }).toString(),
-      signal: timeoutSignal(6000),
+      signal: timeoutSignal(4000),
     });
     if (!createRes.ok) return null;
     const createData = await createRes.json();
     if (!createData.status || createData.status !== 'success') return null;
 
-    // Poll transfers — max 3 attempts = 3 seconds (was 45!)
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const listRes = await fetch(
         `https://www.premiumize.me/api/transfer/list?apikey=${ADMIN_PM_KEY}`,
-        { signal: timeoutSignal(6000) }
+        { signal: timeoutSignal(4000) }
       );
       if (!listRes.ok) continue;
       const listData = await listRes.json();
@@ -321,7 +296,7 @@ async function getPMStream(infoHash, title) {
         if (!folderId) return null;
         const folderRes = await fetch(
           `https://www.premiumize.me/api/folder/list?id=${folderId}&apikey=${ADMIN_PM_KEY}`,
-          { signal: timeoutSignal(6000) }
+          { signal: timeoutSignal(4000) }
         );
         if (!folderRes.ok) continue;
         const folderData = await folderRes.json();
@@ -340,31 +315,29 @@ async function getPMStream(infoHash, title) {
 }
 
 // ------------------------------------------------------------------
-// TorBox — torrent + stream (max 8s total)
+// TorBox — torrent + stream (max 5s total)
 // ------------------------------------------------------------------
 async function getTBStream(infoHash, title) {
   if (!ADMIN_TB_KEY) return null;
   const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title)}`;
 
   try {
-    // Add torrent
     const addRes = await fetch('https://api.torbox.app/v1/api/torrents', {
       method: 'POST',
       headers: { Authorization: `Bearer ${ADMIN_TB_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ magnet }),
-      signal: timeoutSignal(6000),
+      signal: timeoutSignal(4000),
     });
     if (!addRes.ok) return null;
     const addData = await addRes.json();
     const torrentId = addData?.data?.torrent_id || addData?.torrent_id;
     if (!torrentId) return null;
 
-    // Poll — max 3 attempts = 3 seconds (was 45!)
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 1000));
       const infoRes = await fetch(
         `https://api.torbox.app/v1/api/torrents/${torrentId}`,
-        { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
+        { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(4000) }
       );
       if (!infoRes.ok) continue;
       const info = await infoRes.json();
@@ -373,7 +346,7 @@ async function getTBStream(infoHash, title) {
       if (t.status === 'completed' || t.status === 'seeding') {
         const filesRes = await fetch(
           `https://api.torbox.app/v1/api/torrents/${torrentId}/files`,
-          { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
+          { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(4000) }
         );
         if (!filesRes.ok) continue;
         const filesData = await filesRes.json();
@@ -382,7 +355,7 @@ async function getTBStream(infoHash, title) {
         if (video) {
           const dlRes = await fetch(
             `https://api.torbox.app/v1/api/torrents/${torrentId}/download/${video.id}`,
-            { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(6000) }
+            { headers: { Authorization: `Bearer ${ADMIN_TB_KEY}` }, signal: timeoutSignal(4000) }
           );
           if (!dlRes.ok) continue;
           const dlData = await dlRes.json();
@@ -409,7 +382,6 @@ function getDirectStreams(torrent) {
   const encodedTitle = encodeURIComponent(title || 'video');
   const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodedTitle}`;
 
-  // Public trackers for web seed fallback
   const trackers = [
     'udp://tracker.openbittorrent.com:80',
     'udp://tracker.opentrackr.org:1337',
@@ -448,7 +420,7 @@ function getDirectStreams(torrent) {
 
 // ------------------------------------------------------------------
 // Multi-debrid stream resolver — RD (instant cache) → Direct → PM → TB
-// Each provider limited to 10s max via withTimeout
+// Each provider limited to 5s max via withTimeout
 // ------------------------------------------------------------------
 async function resolveStream(torrent, usedProviders) {
   const { infoHash, title } = torrent;
@@ -457,12 +429,11 @@ async function resolveStream(torrent, usedProviders) {
   // 1. Real-Debrid (instant cache check first, then fast add)
   if (ADMIN_RD_KEY && !usedProviders.has('rd')) {
     try {
-      const isAvailable = await withTimeout(checkRDAvailability(infoHash), 5000, 'RD availability');
+      const isAvailable = await withTimeout(checkRDAvailability(infoHash), 4000, 'RD availability');
       console.log(`[content] RD availability for ${infoHash.substring(0, 12)}:`, isAvailable);
 
-      // If available in cache, try RD immediately
       if (isAvailable) {
-        const rdStreams = await withTimeout(getRDStream(infoHash, title), 8000, 'RD stream');
+        const rdStreams = await withTimeout(getRDStream(infoHash, title), 5000, 'RD stream');
         if (rdStreams && rdStreams.length > 0) {
           for (const s of rdStreams) {
             streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
@@ -471,8 +442,7 @@ async function resolveStream(torrent, usedProviders) {
           return streams;
         }
       }
-      // Even if not in instant cache, try a quick add (RD may have it cached soon)
-      const rdStreams = await withTimeout(getRDStream(infoHash, title), 6000, 'RD stream (non-cached)');
+      const rdStreams = await withTimeout(getRDStream(infoHash, title), 5000, 'RD stream (non-cached)');
       if (rdStreams && rdStreams.length > 0) {
         for (const s of rdStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'rd' });
@@ -498,7 +468,7 @@ async function resolveStream(torrent, usedProviders) {
   // 3. Premiumize
   if (ADMIN_PM_KEY && !usedProviders.has('pm')) {
     try {
-      const pmStreams = await withTimeout(getPMStream(infoHash, title), 6000, 'PM stream');
+      const pmStreams = await withTimeout(getPMStream(infoHash, title), 5000, 'PM stream');
       if (pmStreams && pmStreams.length > 0) {
         for (const s of pmStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'pm' });
@@ -514,7 +484,7 @@ async function resolveStream(torrent, usedProviders) {
   // 4. TorBox
   if (ADMIN_TB_KEY && !usedProviders.has('tb')) {
     try {
-      const tbStreams = await withTimeout(getTBStream(infoHash, title), 6000, 'TB stream');
+      const tbStreams = await withTimeout(getTBStream(infoHash, title), 5000, 'TB stream');
       if (tbStreams && tbStreams.length > 0) {
         for (const s of tbStreams) {
           streams.push({ ...s, quality: torrent.quality, size: torrent.size, sourceType: 'debrid', infoHash, service: 'tb' });
@@ -531,7 +501,7 @@ async function resolveStream(torrent, usedProviders) {
 }
 
 // ------------------------------------------------------------------
-// Main handler — global 8s timeout, fast fail
+// Main handler — global 15s timeout, fast fail
 // ------------------------------------------------------------------
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -561,31 +531,40 @@ export default async function handler(req, res) {
   const searchTitle = title || '';
   console.log(`[content] ${imdbId || '-'} "${searchTitle}" ${type || 'movie'} S${season || '-'}E${episode || '-'} plan=${subCheck.plan}`);
 
-  // 2. Search torrents (parallel, 8s timeout each)
+  // 2. Search torrents (parallel, 5s timeout each)
   const [torrentioResults, ytsResults] = await Promise.all([
-    withTimeout(searchTorrentio(imdbId, type, season, episode), 8000, 'Torrentio'),
-    type !== 'series' ? withTimeout(searchYts(imdbId), 6000, 'YTS') : Promise.resolve([]),
+    withTimeout(searchTorrentio(imdbId, type, season, episode), 5000, 'Torrentio'),
+    type !== 'series' ? withTimeout(searchYts(imdbId), 5000, 'YTS') : Promise.resolve([]),
   ]).catch(() => [[], []]);
 
-  // Filter by quality: 4K and 1080p only (reject 720p and below)
+  // Merge and filter by quality + reject XviD
   const allowedQualities = new Set(['4K', '1080p']);
-  const filteredTorrents = [...torrentioResults, ...ytsResults].filter(t => allowedQualities.has(t.quality));
-  // If no high-quality torrents found, fallback to any quality
-  const allTorrents = filteredTorrents.length > 0 ? filteredTorrents : [...torrentioResults, ...ytsResults];
+  let allTorrents = [...torrentioResults, ...ytsResults];
+  
+  // Reject XviD explicitly
+  allTorrents = allTorrents.filter(t => {
+    const lowerTitle = (t.title || '').toLowerCase();
+    return !lowerTitle.includes('xvid');
+  });
 
-  console.log(`[content] Torrents: ${allTorrents.length} (after quality filter)`);
+  // Filter to 4K/1080p only
+  const filteredTorrents = allTorrents.filter(t => allowedQualities.has(t.quality));
+  // If no high-quality torrents found, fallback to any quality (except XviD already filtered)
+  const finalTorrents = filteredTorrents.length > 0 ? filteredTorrents : allTorrents;
 
-  // 3. Resolve streams via debrid chain — each torrent gets max 8s
+  console.log(`[content] Torrents: ${finalTorrents.length} (after quality+XviD filter)`);
+
+  // 3. Resolve streams via debrid chain — each torrent gets max 5s
   const streams = [];
   const checkedHashes = new Set();
   const usedProviders = new Set();
 
-  for (const torrent of allTorrents.slice(0, 6)) {
+  for (const torrent of finalTorrents.slice(0, 6)) {
     if (checkedHashes.has(torrent.infoHash)) continue;
     checkedHashes.add(torrent.infoHash);
 
     try {
-      const resolved = await withTimeout(resolveStream(torrent, usedProviders), 8000, 'resolveStream');
+      const resolved = await withTimeout(resolveStream(torrent, usedProviders), 5000, 'resolveStream');
       if (resolved && resolved.length > 0) {
         streams.push(...resolved);
         // Continue trying other hashes for backup streams
@@ -606,8 +585,11 @@ export default async function handler(req, res) {
 
   console.log(`[content] Returning ${streams.length} streams`);
 
-  // 5. If no streams found, return clear error
-  if (streams.length === 0) {
+  // 5. Validate URLs are present
+  const validStreams = streams.filter(s => s.url && s.url.length > 10);
+
+  // 6. If no streams found, return clear error
+  if (validStreams.length === 0) {
     return res.status(200).json({
       imdbId: imdbId || null,
       type: type || 'movie',
@@ -627,7 +609,7 @@ export default async function handler(req, res) {
     season,
     episode,
     plan: subCheck.plan,
-    count: streams.length,
-    streams: streams.slice(0, 10),
+    count: validStreams.length,
+    streams: validStreams.slice(0, 10),
   });
 }

@@ -25,6 +25,7 @@ function Player() {
   const [loading, setLoading] = useState(true);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streams, setStreams] = useState([]);
+  const [streamIndex, setStreamIndex] = useState(0);
   const [currentStream, setCurrentStream] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -117,6 +118,7 @@ function Player() {
         if (cancelled) return;
 
         setStreams(results);
+        setStreamIndex(0);
         if (results.length > 0) {
           setCurrentStream(results[0]);
           setAddProgress('');
@@ -146,6 +148,9 @@ function Player() {
           imdb_id: data.imdbId,
           query: searchTitle || data.title,
           lang: 'heb,eng',
+          type,
+          season: season || null,
+          episode: episode || null,
         });
         if (cancelled) return;
 
@@ -268,7 +273,7 @@ function Player() {
       video.removeAttribute('src');
       video.load();
     };
-  }, [currentStream]);
+  }, [currentStream, streamIndex, streams]);
 
   // Sync muted/volume to video element (more reliable than JSX prop)
   useEffect(() => {
@@ -292,9 +297,29 @@ function Player() {
         setBuffered(video.buffered.end(video.buffered.length - 1));
       }
     };
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => { setPlaying(true); setError(null); };
     const onPause = () => setPlaying(false);
-    const onError = () => setError('שגיאת ניגון');
+    const onCanPlay = () => { setError(null); setAudioWarning(null); };
+    const onError = () => {
+      console.warn('[Player] Video error on stream', streamIndex, currentStream?.url);
+      // Auto-fallback to next stream
+      if (streamIndex + 1 < streams.length) {
+        console.log('[Player] Auto-fallback to stream', streamIndex + 1);
+        setStreamIndex(prev => prev + 1);
+        setCurrentStream(streams[streamIndex + 1]);
+        setError(`שגיאת ניגון במקור ${streamIndex + 1}, מנסה מקור אחר...`);
+      } else {
+        setError('שגיאת ניגון — אין מקורות נוספים זמינים');
+      }
+    };
+    const onStalled = () => {
+      console.warn('[Player] Video stalled on stream', streamIndex);
+      if (streamIndex + 1 < streams.length) {
+        setStreamIndex(prev => prev + 1);
+        setCurrentStream(streams[streamIndex + 1]);
+        setError(`המקור נתקע, מנסה מקור אחר...`);
+      }
+    };
 
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('durationchange', onDurationChange);
@@ -302,7 +327,9 @@ function Player() {
     video.addEventListener('progress', onProgress);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
+    video.addEventListener('canplay', onCanPlay);
     video.addEventListener('error', onError);
+    video.addEventListener('stalled', onStalled);
 
     // Immediate check in case duration is already available
     if (video.duration && !isNaN(video.duration)) {
@@ -316,7 +343,9 @@ function Player() {
       video.removeEventListener('progress', onProgress);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
+      video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
+      video.removeEventListener('stalled', onStalled);
     };
   }, [currentStream]);
 
@@ -377,11 +406,14 @@ function Player() {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  const selectStream = (stream) => {
-    setCurrentStream(stream);
-    setShowStreamPicker(false);
-    setError(null);
-    setAudioWarning(null);
+  const selectStream = (index) => {
+    if (index >= 0 && index < streams.length) {
+      setStreamIndex(index);
+      setCurrentStream(streams[index]);
+      setShowStreamPicker(false);
+      setError(null);
+      setAudioWarning(null);
+    }
   };
 
   const handleRetry = () => {
@@ -576,9 +608,9 @@ function Player() {
                   {streams.map((stream, i) => (
                     <button
                       key={i}
-                      onClick={() => selectStream(stream)}
+                      onClick={() => selectStream(i)}
                       className={`w-full text-right px-4 py-3 rounded-xl transition-colors ${
-                        currentStream?.url === stream.url ? 'bg-sb-red text-white' : 'bg-sb-surface text-sb-light hover:bg-sb-border'
+                        streamIndex === i ? 'bg-sb-red text-white' : 'bg-sb-surface text-sb-light hover:bg-sb-border'
                       }`}
                     >
                       <p className="text-sm font-medium">{stream.title}</p>
