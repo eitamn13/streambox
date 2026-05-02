@@ -3,6 +3,7 @@
 // =============================================================
 
 import { getCustomerKey } from './SubscriptionManager.js';
+import { searchMagnets as _searchMagnets, searchYtsMagnets as _searchYtsMagnets } from './TorrentSearch.js';
 
 const STORAGE_KEYS = {
   realdebrid: 'sb_debrid_rd',
@@ -409,159 +410,15 @@ export async function searchRdLibrary(title) {
 }
 
 // ============================================================================
-// MULTI-PROVIDER MAGNET SEARCH
+// MULTI-PROVIDER MAGNET SEARCH (delegated to TorrentSearch.js - client-side)
 // ============================================================================
 
-// TorrentAPI (ThePirateBay) - reliable server-side API
-async function searchTorrentAPI(query) {
-  try {
-    const url = `https://apibay.org/q.php?q=${encodeURIComponent(query)}&cat=201`;
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data)) return [];
-
-    return data
-      .filter(t => t.info_hash && t.name)
-      .map(t => ({
-        title: t.name,
-        year: '',
-        quality: detectQuality(t.name),
-        type: 'bluray',
-        size: formatBytes(parseInt(t.size) || 0),
-        magnet: `magnet:?xt=urn:btih:${t.info_hash}&dn=${encodeURIComponent(t.name)}&tr=udp://tracker.opentrackr.org:1337/announce`,
-        hash: t.info_hash,
-        seeds: parseInt(t.seeders) || 0,
-        peers: parseInt(t.leechers) || 0,
-        provider: 'TorrentAPI',
-      }));
-  } catch (e) {
-    console.warn('TorrentAPI search failed:', e);
-    return [];
-  }
-}
-
-// YTS - may be blocked but has great quality info
-async function searchYTS(query) {
-  try {
-    const url = `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=5`;
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const movies = data.data?.movies || [];
-
-    const results = [];
-    for (const movie of movies) {
-      for (const torrent of (movie.torrents || [])) {
-        const hash = torrent.hash;
-        const magnet = `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(movie.title_long || movie.title)}`;
-        results.push({
-          title: movie.title_long || movie.title,
-          year: movie.year,
-          quality: torrent.quality,
-          type: torrent.type,
-          size: torrent.size,
-          magnet,
-          hash,
-          seeds: torrent.seeds,
-          peers: torrent.peers,
-          provider: 'YTS',
-        });
-      }
-    }
-    return results;
-  } catch (e) {
-    console.warn('YTS search failed:', e);
-    return [];
-  }
-}
-
-// EZTV - for TV shows
-async function searchEZTV(imdbId) {
-  if (!imdbId) return [];
-  try {
-    const url = `https://eztv.re/api/get-torrents?limit=10&imdb_id=${imdbId.replace('tt', '')}`;
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const torrents = data.torrents || [];
-
-    return torrents.map(t => ({
-      title: t.title || t.filename || '',
-      year: '',
-      quality: detectQuality(t.filename || t.title || ''),
-      type: 'web',
-      size: formatBytes(parseInt(t.size_bytes) || 0),
-      magnet: t.magnet_url || `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(t.title || '')}`,
-      hash: t.hash,
-      seeds: parseInt(t.seeds) || 0,
-      peers: parseInt(t.peers) || 0,
-      provider: 'EZTV',
-    }));
-  } catch (e) {
-    console.warn('EZTV search failed:', e);
-    return [];
-  }
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return '?';
-  const gb = bytes / (1024 ** 3);
-  if (gb >= 1) return `${gb.toFixed(2)} GB`;
-  const mb = bytes / (1024 ** 2);
-  return `${mb.toFixed(0)} MB`;
-}
-
-// Main search function - tries multiple providers
 export async function searchMagnets(title, year = '', imdbId = '', type = 'movie') {
-  const query = year ? `${title} ${year}` : title;
-  const allResults = [];
-
-  // Try YTS first for movies (best quality info)
-  if (type === 'movie') {
-    const ytsResults = await searchYTS(query);
-    allResults.push(...ytsResults);
-  }
-
-  // Try EZTV for TV shows
-  if (type === 'series' && imdbId) {
-    const eztvResults = await searchEZTV(imdbId);
-    allResults.push(...eztvResults);
-  }
-
-  // Fallback to TorrentAPI for everything
-  if (allResults.length === 0) {
-    const tpbResults = await searchTorrentAPI(query);
-    allResults.push(...tpbResults);
-  }
-
-  // Also always search TorrentAPI as supplement for movies
-  if (type === 'movie' && allResults.length < 3) {
-    const tpbResults = await searchTorrentAPI(query);
-    // Avoid duplicates by hash
-    const existingHashes = new Set(allResults.map(r => r.hash));
-    for (const r of tpbResults) {
-      if (!existingHashes.has(r.hash)) {
-        allResults.push(r);
-      }
-    }
-  }
-
-  // Sort by quality then seeds
-  const qualityOrder = { '4K': 4, '2160p': 4, '1080p': 3, '720p': 2, '480p': 1, 'auto': 0 };
-  return allResults.sort((a, b) => {
-    const qa = qualityOrder[a.quality] || 0;
-    const qb = qualityOrder[b.quality] || 0;
-    if (qa !== qb) return qb - qa;
-    return (b.seeds || 0) - (a.seeds || 0);
-  });
+  return _searchMagnets(title, year, imdbId, type);
 }
 
-// Legacy alias
 export async function searchYtsMagnets(title, year = '') {
-  return searchMagnets(title, year, '', 'movie');
+  return _searchYtsMagnets(title, year);
 }
 
 // ============================================================================
