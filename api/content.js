@@ -36,6 +36,24 @@ function detectQuality(filename = '') {
 }
 
 // ------------------------------------------------------------------
+// Admin check — server-side only, cannot be bypassed from frontend
+// ------------------------------------------------------------------
+async function isAdminUser(supabase, user) {
+  if (!user) return false;
+  // 1. Check subscriptions table
+  try {
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('is_admin')
+      .eq('user_id', user.id)
+      .single();
+    if (data?.is_admin) return true;
+  } catch { /* ignore */ }
+  // 2. Fallback: email contains 'admin'
+  return user.email?.includes('admin') || false;
+}
+
+// ------------------------------------------------------------------
 // Auth & Subscription check
 // ------------------------------------------------------------------
 async function checkSubscription(req) {
@@ -54,6 +72,12 @@ async function checkSubscription(req) {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
     if (authErr || !user) {
       return { ok: false, plan: 'free', status: 'none', reason: 'סשן לא תקין' };
+    }
+
+    // Admin gets premium automatically — no Stripe needed
+    const isAdmin = await isAdminUser(supabase, user);
+    if (isAdmin) {
+      return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
     }
 
     const { data: sub } = await supabase

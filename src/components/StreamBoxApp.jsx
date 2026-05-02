@@ -19,7 +19,7 @@ import Signup from '../pages/Signup.jsx';
 import ResetPassword from '../pages/ResetPassword.jsx';
 import Profile from '../pages/Profile.jsx';
 import Subscription from '../pages/Subscription.jsx';
-import Admin from '../pages/Admin.jsx';
+
 import NotFound from './NotFound.jsx';
 
 registerBuiltInPlugins();
@@ -48,7 +48,7 @@ function StreamBoxApp() {
                   <Route path="/services" element={<Services />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                  <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Routes>
