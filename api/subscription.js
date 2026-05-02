@@ -140,6 +140,37 @@ export default async function handler(req, res) {
     if (subError && subError.code !== 'PGRST116') {
       console.error('Subscription fetch error:', subError);
     }
+    
+    // If no subscription row found, but user exists in users table with admin flag
+    if (!sub && subError?.code === 'PGRST116') {
+      console.log('[API] No subscription row found, checking users table for admin');
+      try {
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+        if (userRow?.is_admin) {
+          console.log('[API] User is admin via users table, returning premium');
+          return res.status(200).json({
+            user_id: user.id,
+            email: user.email,
+            plan: 'premium',
+            status: 'active',
+            is_premium: true,
+            is_admin: true,
+            current_period_end: null,
+            usage: {
+              movies_today: 0,
+              max_movies_daily: Infinity,
+              max_quality: '4K',
+              max_concurrent: 3,
+            },
+            customer_key: null,
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
 
     const today = new Date().toISOString().split('T')[0];
     const { data: usage, error: usageError } = await supabase
