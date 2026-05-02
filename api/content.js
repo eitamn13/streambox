@@ -64,7 +64,46 @@ async function searchTorrentio(imdbId, type, season, episode) {
 }
 
 // ------------------------------------------------------------------
-// 2. Check Real-Debrid instant availability
+// 2. Search YTS for movies (guaranteed 720p/1080p)
+// ------------------------------------------------------------------
+async function searchYts(imdbId) {
+  if (!imdbId) return [];
+  const cleanId = imdbId.toString().startsWith('tt') ? imdbId : `tt${imdbId}`;
+  const mirrors = [
+    `https://yts.mx/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
+    `https://yts.lt/api/v2/list_movies.json?query_term=${cleanId}&limit=5`,
+  ];
+
+  for (const url of mirrors) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: timeoutSignal(10000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const movies = data?.data?.movies || [];
+      const results = [];
+      for (const movie of movies) {
+        for (const t of movie.torrents || []) {
+          if (t.hash) {
+            const q = t.quality || 'auto';
+            results.push({
+              infoHash: t.hash.toLowerCase(),
+              title: `${movie.title_long || movie.title} [YTS ${q}]`,
+              quality: q === '2160p' ? '4K' : q,
+              size: t.size || '?',
+            });
+          }
+        }
+      }
+      if (results.length > 0) return results;
+    } catch (e) {
+      console.warn('[content] YTS failed:', e.message);
+    }
+  }
+  return [];
+}
+
+// ------------------------------------------------------------------
+// 3. Check Real-Debrid instant availability
 // ------------------------------------------------------------------
 async function checkRDAvailability(infoHash) {
   if (!ADMIN_RD_KEY) return false;
@@ -83,7 +122,7 @@ async function checkRDAvailability(infoHash) {
 }
 
 // ------------------------------------------------------------------
-// 3. Add magnet to RD, select files, unrestrict
+// 4. Add magnet to RD, select files, unrestrict
 // ------------------------------------------------------------------
 async function getRDStream(infoHash, title) {
   if (!ADMIN_RD_KEY) return null;
@@ -196,15 +235,17 @@ export default async function handler(req, res) {
 
   console.log(`[content] Request: ${imdbId} ${type} S${season || '-'}E${episode || '-'} plan=${plan}`);
 
-  // 1. Search Torrentio
+  // 1. Search Torrentio + YTS (movies only)
   const torrentioResults = await searchTorrentio(imdbId, type, season, episode);
-  console.log(`[content] Torrentio found: ${torrentioResults.length}`);
+  const ytsResults = type !== 'series' ? await searchYts(imdbId) : [];
+  const allResults = [...torrentioResults, ...ytsResults];
+  console.log(`[content] Torrentio: ${torrentioResults.length}, YTS: ${ytsResults.length}, total: ${allResults.length}`);
 
   // 2. Check availability and get streams
   const streams = [];
   const checked = new Set();
 
-  for (const result of torrentioResults.slice(0, 5)) {
+  for (const result of allResults.slice(0, 8)) {
     if (checked.has(result.infoHash)) continue;
     checked.add(result.infoHash);
 

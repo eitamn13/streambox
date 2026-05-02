@@ -149,6 +149,7 @@ export function isQualityAllowed(quality, subscription) {
 }
 
 // Filter streams by plan quality limit
+// Returns allowed streams first, then locked streams (lowest quality first)
 export function filterStreamsByPlan(streams, subscription) {
   const sub = subscription || getStoredSubscription() || { plan: 'free' };
   const plan = PLANS[sub.plan] || PLANS.free;
@@ -158,7 +159,21 @@ export function filterStreamsByPlan(streams, subscription) {
   const maxRank = { '480p': 1, '720p': 2, '1080p': 3, '4K': 4, 'auto': 2 }[plan.limits.maxQuality] || 2;
   const qualityRank = { '480p': 1, '720p': 2, '1080p': 3, '4K': 4, 'auto': 2 };
   
-  return streams.filter(s => (qualityRank[s.quality] || 2) <= maxRank);
+  const allowed = [];
+  const locked = [];
+  
+  for (const s of streams) {
+    if ((qualityRank[s.quality] || 2) <= maxRank) {
+      allowed.push(s);
+    } else {
+      locked.push({ ...s, locked: true });
+    }
+  }
+  
+  // Sort locked by quality (lowest first so free user gets 1080p before 4K)
+  locked.sort((a, b) => (qualityRank[a.quality] || 2) - (qualityRank[b.quality] || 2));
+  
+  return [...allowed, ...locked];
 }
 
 // Create Stripe checkout session

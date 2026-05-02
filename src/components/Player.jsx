@@ -161,13 +161,13 @@ function Player() {
         const allowedQualities = isPremium
           ? ['4K', '2160p', '1080p', '720p', '480p', 'auto']
           : ['720p', '480p', 'auto'];
-        const best = magnets.find(m => allowedQualities.includes(m.quality)) || magnets[0];
-
-        const locked = !isPremium && (best.quality === '4K' || best.quality === '1080p');
-        if (locked) {
-          setError('האיכות הזו דורשת מנוי פרימיום');
-          setAddProgress('');
-          return;
+        let best = magnets.find(m => allowedQualities.includes(m.quality));
+        let locked = false;
+        if (!best) {
+          // No allowed quality found — pick lowest quality available and mark locked
+          const qualityOrder = { '480p': 1, '720p': 2, '1080p': 3, '4K': 4, 'auto': 2 };
+          best = [...magnets].sort((a, b) => (qualityOrder[a.quality] || 2) - (qualityOrder[b.quality] || 2))[0];
+          locked = !isPremium;
         }
 
         setAddProgress(`מוסיף ${best.quality || ''} לשרת...`);
@@ -179,12 +179,15 @@ function Player() {
 
         if (debridStreams.length > 0) {
           const filtered = filterStreams(debridStreams);
+          if (locked && filtered.length > 0 && !filtered[0].locked) {
+            filtered[0] = { ...filtered[0], locked: true };
+          }
           setStreams(prev => [...prev, ...filtered]);
           if (filtered.length > 0) {
             setCurrentStream(filtered[0]);
             recordWatch();
           } else {
-            setError('האיכות הזו דורשת מנוי פרימיום');
+            setError('לא נמצאו קבצים להורדה');
           }
         } else {
           setError('לא נמצאו קבצים להורדה');
@@ -572,7 +575,12 @@ function Player() {
                         currentStream?.url === stream.url ? 'bg-sb-red text-white' : 'bg-sb-surface text-sb-light hover:bg-sb-border'
                       }`}
                     >
-                      <p className="text-sm font-medium">{stream.title}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">{stream.title}</p>
+                        {stream.locked && (
+                          <span className="text-[10px] bg-sb-purple text-white px-1.5 py-0.5 rounded font-bold shrink-0">פרימיום</span>
+                        )}
+                      </div>
                       <p className="text-xs opacity-70">{stream.quality} • {stream.provider}</p>
                     </button>
                   ))}
@@ -643,7 +651,15 @@ function Player() {
                 >
                   <MonitorPlay className="w-3.5 h-3.5" />
                   {currentStream?.title?.slice(0, 15) || 'מקור'}
+                  {currentStream?.locked && (
+                    <span className="text-[10px] bg-sb-purple text-white px-1 py-0.5 rounded font-bold mr-1">פרימיום</span>
+                  )}
                 </button>
+              )}
+              {currentStream?.locked && (
+                <span className="sm:hidden text-[10px] bg-sb-purple text-white px-1.5 py-0.5 rounded font-bold">
+                  פרימיום
+                </span>
               )}
             </div>
 
