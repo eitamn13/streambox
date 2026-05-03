@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles, Tv } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../contexts/AppContext';
 import AnimatedPage from './ui/AnimatedPage';
 
 export default function HomeScreen() {

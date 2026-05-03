@@ -15,7 +15,7 @@ import {
   Star,
   Filter,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../contexts/AppContext';
 import AnimatedPage from './ui/AnimatedPage';
 import VideoPlayer from './VideoPlayer';
 import { fetchM3U, getCategories, generateMockEPG } from '../utils/m3uParser';
