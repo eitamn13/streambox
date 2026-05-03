@@ -35,6 +35,11 @@ export function AppProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('sb-settings') || '{"autoplay":true,"notifications":true}'); } catch { return { autoplay: true, notifications: true }; }
   });
 
+  // Live TV settings
+  const [tvSettings, setTvSettings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sb-tv-settings') || '{"m3uUrl":"","channels":[]}'); } catch { return { m3uUrl: '', channels: [] }; }
+  });
+
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Create default profile if none exists
@@ -93,6 +98,7 @@ export function AppProvider({ children }) {
   useEffect(() => { localStorage.setItem('sb-active-profile', activeProfile || ''); }, [activeProfile]);
   useEffect(() => { localStorage.setItem('sb-continue', JSON.stringify(continueWatching)); }, [continueWatching]);
   useEffect(() => { localStorage.setItem('sb-settings', JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem('sb-tv-settings', JSON.stringify(tvSettings)); }, [tvSettings]);
 
   const addToWatchlist = useCallback((item) => {
     setWatchlist((prev) => {
@@ -149,6 +155,7 @@ export function AppProvider({ children }) {
         profiles, activeProfile, setActiveProfile, createProfile, deleteProfile,
         continueWatching, addContinue,
         settings, updateSettings,
+        tvSettings, setTvSettings,
         isAdmin,
       }}
     >

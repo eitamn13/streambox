@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Compass, Search, Library, Crown } from 'lucide-react';
+import { Home, Compass, Search, Library, Crown, Tv } from 'lucide-react';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 
 function BottomNav() {
@@ -11,6 +11,7 @@ function BottomNav() {
     { path: '/', label: 'בית', icon: Home },
     { path: '/discover', label: 'גלה', icon: Compass },
     { path: '/search', label: 'חיפוש', icon: Search },
+    { path: '/live-tv', label: 'טלוויזיה', icon: Tv },
     { path: '/library', label: 'ספרייה', icon: Library },
     { path: '/subscription', label: 'מנוי', icon: Crown, highlight: needsSub },
   ];

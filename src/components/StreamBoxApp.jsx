@@ -14,6 +14,7 @@ import Player from './Player.jsx';
 import Settings from './Settings.jsx';
 import Addons from './Addons.jsx';
 import Services from './Services.jsx';
+import LiveTV from './LiveTV.jsx';
 import Login from '../pages/Login.jsx';
 import Signup from '../pages/Signup.jsx';
 import ResetPassword from '../pages/ResetPassword.jsx';
@@ -47,6 +48,7 @@ function StreamBoxApp() {
                   <Route path="/addons" element={<Addons />} />
                   <Route path="/services" element={<Services />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/live-tv" element={<LiveTV />} />
                   <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
                   <Route path="*" element={<NotFound />} />

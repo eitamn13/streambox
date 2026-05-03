@@ -44,6 +44,7 @@ function TopBar() {
     { path: '/', label: 'בית' },
     { path: '/discover', label: 'גלה' },
     { path: '/library', label: 'ספרייה' },
+    { path: '/live-tv', label: 'טלוויזיה' },
     { path: '/subscription', label: 'מנוי' },
 
   ];

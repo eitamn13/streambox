@@ -1,3 +1,8 @@
 [33m2d37771[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: store JWT token in sb-token for API auth
 [33mcc81fb6[m fix: subscription API, admin status, mock fallback
 [33mc9cb122[m feat: admin auto-premium, removed admin page from UI
+[33mf096638[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: timeout, quality filter, Hebrew subtitles, auto fallback
+[33m0b37de0[m fix: reduce polling timeouts, add direct fallback
+[33me165545[m fix: reduce polling timeouts, add direct fallback
+[33mcad7776[m fix(auth): only clear token on SIGNED_OUT event, strengthen login/signup error handling
+[33m8c7773b[m fix(api/content): add admin fallback from users table + detailed server logs
