@@ -227,7 +227,7 @@ export function getAddonManifest() {
     id: 'community.streambox',
     version: '1.0.0',
     name: 'StreamBox',
-    description: 'StreamBox - גלה תוכן חוקי',
+    description: 'StreamBox - אגרגטור תוכן',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie', 'series'],
     catalogs: [

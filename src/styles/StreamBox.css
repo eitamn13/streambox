@@ -179,7 +179,14 @@ body {
 .content-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 10px;
+}
+
+@media (min-width: 380px) {
+  .content-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
 }
 
 @media (min-width: 480px) {
@@ -256,8 +263,30 @@ input:focus, textarea:focus, select:focus {
 
 /* Touch-friendly tap targets */
 @media (pointer: coarse) {
-  button, a {
+  button, a, [role="button"] {
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .page-transition {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  /* Larger touch targets on mobile nav */
+  nav.glass a, nav.glass button {
+    padding: 8px 12px;
+  }
+}
+
+/* Safe area for notched phones */
+.safe-area-pb {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* Prevent text size adjustment on orientation change */
+html {
+  -webkit-text-size-adjust: 100%;
 }

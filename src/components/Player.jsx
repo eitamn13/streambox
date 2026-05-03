@@ -552,9 +552,17 @@ function Player() {
             )}
 
             {!isBusy && !hasStreams && !error && (
-              <div className="text-center">
-                <p className="text-sb-gray mb-2">מחפש מקורות זמינים...</p>
-                <p className="text-xs text-sb-gray/60">אם לא נמצאו מקורות, נסה לרענן או בחר תוכן אחר</p>
+              <div className="text-center p-6">
+                <MonitorPlay className="w-12 h-12 text-sb-gray mx-auto mb-3" />
+                <p className="text-white font-medium mb-2">אין מקורות זמינים</p>
+                <p className="text-sb-gray text-sm mb-4">לא נמצאו מקורות לתוכן זה כרגע.</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleRetry(); }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-sb-red hover:bg-sb-red-hover text-white rounded-xl font-medium text-sm transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  נסה שוב
+                </button>
               </div>
             )}
           </div>
