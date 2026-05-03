@@ -38,6 +38,7 @@ function Player() {
   const [showStreamPicker, setShowStreamPicker] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(false);
   const [showSubStyle, setShowSubStyle] = useState(false);
+  const [skipIndicator, setSkipIndicator] = useState(null);
   const [subStyle, setSubStyle] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sb-sub-style') || '{"fontSize":"medium","color":"#ffffff","bgOpacity":"0.8"}'); }
     catch { return { fontSize: 'medium', color: '#ffffff', bgOpacity: '0.8' }; }
@@ -389,6 +390,8 @@ function Player() {
     const video = videoRef.current;
     if (!video) return;
     video.currentTime = Math.max(0, Math.min(video.currentTime + seconds, duration || video.duration));
+    setSkipIndicator(seconds > 0 ? '+10' : '-10');
+    setTimeout(() => setSkipIndicator(null), 600);
     resetControlsTimeout();
   }, [duration, resetControlsTimeout]);
 
@@ -587,6 +590,15 @@ function Player() {
             >
               <Play className="w-8 h-8 text-white ml-1" fill="white" />
             </button>
+          </div>
+        )}
+
+        {/* Skip indicator */}
+        {skipIndicator && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+            <div className="bg-black/70 text-white px-6 py-3 rounded-2xl text-2xl font-bold animate-pulse">
+              {skipIndicator}
+            </div>
           </div>
         )}
 

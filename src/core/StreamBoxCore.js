@@ -140,6 +140,17 @@ export async function getContentDetails(id, type) {
   };
 }
 
+// Genre IDs for TMDB
+export const GENRES = {
+  action: { id: 28, name: 'אקשן' },
+  comedy: { id: 35, name: 'קומדיה' },
+  drama: { id: 18, name: 'דרמה' },
+  thriller: { id: 53, name: 'מתח' },
+  horror: { id: 27, name: 'אימה' },
+  romance: { id: 10749, name: 'רומנטיקה' },
+  scifi: { id: 878, name: 'מדע בדיוני' },
+};
+
 // Catalogs
 // =========
 export async function getCatalog(category, page = 1) {
@@ -165,6 +176,28 @@ export async function getCatalog(category, page = 1) {
     backdrop: item.backdrop_path ? `${TMDB_IMG}/original${item.backdrop_path}` : null,
     year: (item.release_date || item.first_air_date || '').slice(0, 4),
     rating: item.vote_average,
+  }));
+}
+
+// Genre-based movie discovery
+export async function getMoviesByGenre(genreId, page = 1) {
+  const data = await tmdbFetch('/discover/movie', {
+    with_genres: genreId,
+    sort_by: 'popularity.desc',
+    page,
+    language: 'he-IL',
+  });
+
+  return (data.results || []).map(item => ({
+    id: item.id,
+    type: 'movie',
+    title: item.title,
+    overview: item.overview,
+    poster: item.poster_path ? `${TMDB_IMG}/w500${item.poster_path}` : null,
+    backdrop: item.backdrop_path ? `${TMDB_IMG}/original${item.backdrop_path}` : null,
+    year: (item.release_date || '').slice(0, 4),
+    rating: item.vote_average,
+    genreIds: item.genre_ids || [],
   }));
 }
 

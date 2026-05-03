@@ -24,23 +24,16 @@ const CATEGORY_LABELS = {
   sport: 'ספורט',
   news: 'חדשות',
   movies: 'סרטים',
-  kids: 'ילדים',
-  music: 'מוזיקה',
-  general: 'כללי',
 };
 
 const CATEGORY_ICONS = {
   sport: '⚽',
   news: '📰',
   movies: '🎬',
-  kids: '🧸',
-  music: '🎵',
-  general: '📺',
 };
 
 const IPTV_SOURCES = [
   { id: 'tvteam', name: 'tv.team', placeholder: 'https://tv.team/playlist.m3u?token=...' },
-  { id: 'shalva', name: 'Shalva IPTV', placeholder: 'https://shalvaiptv.com/playlist.m3u?user=...' },
 ];
 
 function LiveTV() {
@@ -192,12 +185,12 @@ function LiveTV() {
             <p className="text-xs text-sb-gray mb-3">
               הדבק כאן את כתובת רשימת ה-M3U שלך מ{' '}
               <a
-                href={selectedSource === 'shalva' ? 'https://shalvaiptv.com/' : 'https://tv.team/packages'}
+                href="https://tv.team/packages"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sb-red hover:underline inline-flex items-center gap-1"
               >
-                {currentSource.name} <ExternalLink className="w-3 h-3" />
+                tv.team <ExternalLink className="w-3 h-3" />
               </a>
             </p>
 
