@@ -525,6 +525,7 @@ function Player() {
             className="w-full h-full max-h-[70vh] object-contain"
             playsInline
             controls={false}
+            preload="auto"
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           />
         ) : (
@@ -548,7 +549,10 @@ function Player() {
             )}
 
             {!isBusy && !hasStreams && !error && (
-              <p className="text-sb-gray">מכין את התוכן...</p>
+              <div className="text-center">
+                <p className="text-sb-gray mb-2">מחפש מקורות זמינים...</p>
+                <p className="text-xs text-sb-gray/60">אם לא נמצאו מקורות, נסה לרענן או בחר תוכן אחר</p>
+              </div>
             )}
           </div>
         )}
@@ -685,7 +689,10 @@ function Player() {
               className="flex-1 h-1.5 bg-sb-surface rounded-full overflow-hidden cursor-pointer relative"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                seek((e.clientX - rect.left) / rect.width);
+                const isRTL = document.dir === 'rtl' || getComputedStyle(document.body).direction === 'rtl';
+                let ratio = (e.clientX - rect.left) / rect.width;
+                if (isRTL) ratio = 1 - ratio;
+                seek(Math.max(0, Math.min(1, ratio)));
               }}
             >
               <div

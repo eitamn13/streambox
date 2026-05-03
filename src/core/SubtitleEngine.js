@@ -71,7 +71,31 @@ export async function fetchSubtitles({ imdb_id, tmdb_id, query, lang = 'heb,eng'
     }
   }
 
-  // 2. Fallback to backend subtitle API (OpenSubtitles, etc.)
+  // 2. Try OpenSubtitles legacy REST API (free, no key needed for search)
+  if (imdb_id) {
+    try {
+      const cleanImdb = imdb_id.replace(/^tt/, '');
+      const osRes = await fetch(`https://rest.opensubtitles.org/search/imdbid-${cleanImdb}/sublanguageid-${lang.replace(/,.*$/, '')}`, {
+        headers: { 'User-Agent': 'StreamBox v1.0' },
+      });
+      if (osRes.ok) {
+        const osData = await osRes.json();
+        const osSubs = (osData || []).slice(0, 10).map(s => ({
+          url: s.SubDownloadLink || s.SubtitlesLink,
+          lang: (s.ISO639 === 'he' ? 'he' : s.ISO639) || 'und',
+          label: `${s.LanguageName || s.ISO639} — ${s.SubFormat || 'srt'}`,
+          provider: 'OpenSubtitles',
+          rating: s.SubRating ? parseFloat(s.SubRating) * 2 : 0,
+          downloads: s.SubDownloadsCnt || 0,
+        })).filter(s => s.url);
+        results.push(...osSubs);
+      }
+    } catch (e) {
+      console.warn('OpenSubtitles legacy fetch failed:', e);
+    }
+  }
+
+  // 3. Fallback to backend subtitle API
   try {
     const params = new URLSearchParams();
     if (imdb_id) params.set('imdb_id', imdb_id);
@@ -109,9 +133,30 @@ export async function fetchSubtitles({ imdb_id, tmdb_id, query, lang = 'heb,eng'
 
 export async function loadSubtitleTrack(subUrl, offsetSeconds = 0) {
   try {
-    const res = await fetch(subUrl);
+    // Try with CORS proxy if direct fetch fails
+    let res;
+    try {
+      res = await fetch(subUrl, { headers: { 'Accept': '*/*' } });
+    } catch {
+      // Fallback via corsproxy
+      res = await fetch(`https://corsproxy.io/?${encodeURIComponent(subUrl)}`);
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+
+    // Handle gzip if Content-Encoding is gzip
+    const isGzip = res.headers.get('Content-Encoding') === 'gzip' ||
+                   res.headers.get('Content-Type')?.includes('gzip') ||
+                   subUrl.toLowerCase().endsWith('.gz');
+    let text;
+    if (isGzip && typeof DecompressionStream !== 'undefined') {
+      const ds = new DecompressionStream('gzip');
+      const decompressed = res.body.pipeThrough(ds);
+      const response = new Response(decompressed);
+      text = await response.text();
+    } else {
+      text = await res.text();
+    }
+
     const isSrt = subUrl.toLowerCase().endsWith('.srt') || text.trim().startsWith('1\n') || /\d{2}:\d{2}:\d{2},\d{3}/.test(text);
     let vtt = isSrt ? srtToVtt(text) : text;
     vtt = applyOffset(vtt, offsetSeconds);
