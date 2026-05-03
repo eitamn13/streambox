@@ -84,13 +84,60 @@ function detectCategory(channel) {
   return 'general';
 }
 
-export async function fetchM3U(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`שגיאה בטעינת ה-M3U: ${response.status}`);
+// Check if channel is Israeli (Hebrew text or Israeli keywords)
+function isIsraeliChannel(channel) {
+  const text = `${channel.name} ${channel.group} ${channel.tvgId}`.toLowerCase();
+
+  // Hebrew characters
+  const hasHebrew = /[\u0590-\u05FF]/.test(channel.name + channel.group);
+  if (hasHebrew) return true;
+
+  // Israeli keywords
+  const israeliKeywords = [
+    'israel', 'israeli', 'ישראל', 'ערוץ', 'חדשות', 'ספורט', 'ילדים',
+    'מוזיקה', 'קשת', 'רשת', 'כאן', 'הטלוויזיה', 'החינוכית',
+    'mako', 'keshet', 'reshet', 'kan', 'channel 1', 'channel 2',
+    'channel 10', 'channel 11', 'channel 12', 'channel 13', 'channel 14',
+    ' ערוץ 1', ' ערוץ 2', ' ערוץ 10', ' ערוץ 11', ' ערוץ 12', ' ערוץ 13', ' ערוץ 14',
+    ' ערוץ1', ' ערוץ2', ' ערוץ10', ' ערוץ11', ' ערוץ12', ' ערוץ13', ' ערוץ14',
+    'sport 1', 'sport 2', 'sport 3', 'sport 4', 'sport 5',
+    'ספורט 1', 'ספורט 2', 'ספורט 3', 'ספורט 4', 'ספורט 5',
+    'one', 'two', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+  ];
+
+  for (const kw of israeliKeywords) {
+    if (text.includes(kw.toLowerCase())) return true;
   }
-  const text = await response.text();
-  return parseM3U(text);
+
+  return false;
+}
+
+export async function fetchM3U(url) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`שגיאה בטעינת ה-M3U: ${response.status}`);
+    }
+
+    const text = await response.text();
+    const allChannels = parseM3U(text);
+
+    // Filter only Israeli channels
+    const israeliChannels = allChannels.filter(isIsraeliChannel);
+
+    return israeliChannels;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('הזמן לטעינת הרשימה פג (3 שניות) — בדוק את החיבור');
+    }
+    throw err;
+  }
 }
 
 export function getCategories(channels) {

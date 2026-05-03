@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Maximize, Minimize, Volume2, VolumeX, Play, Pause, Loader2 } from 'lucide-react';
+import { Maximize, Minimize, Volume2, VolumeX, Play, Pause, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LiveTVPlayer({ src, channelName, channelLogo }) {
   const videoRef = useRef(null);
@@ -10,6 +10,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
     if (!video || !src) return;
 
     setIsLoading(true);
+    setIsReady(false);
     setError(null);
     setIsPlaying(false);
 
@@ -27,6 +29,10 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
       setIsLoading(false);
       setIsPlaying(true);
     };
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      setIsReady(true);
+    };
     const handleError = () => {
       setIsLoading(false);
       setError('שגיאת טעינת שידור');
@@ -36,6 +42,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
     video.addEventListener('pause', handlePause);
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('playing', handlePlaying);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('error', handleError);
 
     const isHls = src.includes('.m3u8') || src.includes('type=m3u');
@@ -57,6 +64,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           setIsLoading(false);
+          setIsReady(true);
           video.play().catch(() => {});
         });
 
@@ -85,6 +93,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
       video.src = src;
       video.addEventListener('loadedmetadata', () => {
         setIsLoading(false);
+        setIsReady(true);
         video.play().catch(() => {});
       }, { once: true });
     }
@@ -94,6 +103,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -147,6 +157,7 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
         muted={isMuted}
       />
 
+      {/* Loading overlay */}
       {isLoading && !error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10">
           <Loader2 className="w-10 h-10 text-sb-red animate-spin mb-3" />
@@ -154,11 +165,25 @@ export default function LiveTVPlayer({ src, channelName, channelLogo }) {
         </div>
       )}
 
+      {/* Big center play button when ready but not playing */}
+      {!isLoading && !error && isReady && !isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+          <button
+            onClick={togglePlay}
+            className="w-20 h-20 rounded-full bg-sb-red/90 hover:bg-sb-red flex items-center justify-center transition-colors shadow-lg shadow-sb-red-glow"
+          >
+            <Play className="w-10 h-10 text-white mr-1" fill="white" />
+          </button>
+        </div>
+      )}
+
+      {/* Error overlay */}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10">
+          <AlertCircle className="w-10 h-10 text-sb-red mb-3" />
           <div className="text-red-400 text-sm mb-3">{error}</div>
           <button
-            onClick={() => window.location.reload()}
+            onClick={togglePlay}
             className="px-4 py-2 bg-sb-red text-white rounded-xl text-sm hover:bg-sb-red-hover transition-colors"
           >
             נסה שוב

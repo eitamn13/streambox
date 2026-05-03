@@ -191,6 +191,7 @@ function LiveTV() {
             className="mb-6"
           >
             <LiveTVPlayer
+              key={selectedChannel.id}
               src={selectedChannel.url}
               channelName={selectedChannel.name}
               channelLogo={selectedChannel.logo}
@@ -294,6 +295,16 @@ function LiveTV() {
         )}
       </AnimatePresence>
 
+      {/* Israeli filter badge */}
+      {channels.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sb-red/10 border border-sb-red/30 text-sb-red text-xs font-medium">
+            🇮🇱 ערוצים ישראליים בלבד
+          </span>
+          <span className="text-xs text-sb-gray">{channels.length} ערוצים נמצאו</span>
+        </div>
+      )}
+
       {/* Search & Filters */}
       {channels.length > 0 && (
         <>
@@ -336,7 +347,7 @@ function LiveTV() {
           </div>
 
           <p className="text-xs text-sb-gray mb-3">
-            {filteredChannels.length} ערוצים
+            {filteredChannels.length} מתוך {channels.length} ערוצים
           </p>
 
           {/* Channel Grid */}
