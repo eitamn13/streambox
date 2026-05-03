@@ -63,10 +63,10 @@ function parseExtInf(line) {
 }
 
 const CATEGORY_MAP = {
-  sport: ['sport', 'sports', 'espn', 'fox sports', 'bein', 'sky sport', 'bt sport', 'nba', 'nfl', 'ufc', 'mma', 'boxing', 'motorsport', 'racing', 'golf', 'tennis', 'cricket', 'ספורט', 'כדורגל', 'כדורסל'],
+  sport: ['sport', 'sports', 'espn', 'fox sports', 'bein', 'sky sport', 'bt sport', 'nba', 'nfl', 'ufc', 'mma', 'boxing', 'motorsport', 'racing', 'golf', 'tennis', 'cricket', 'ספורט', 'כדורגל', 'כדורסל', 'sport1', 'sport2', 'sport3', 'sport4', 'sport5'],
   news: ['news', 'cnn', 'bbc', 'fox news', 'msnbc', 'al jazeera', 'sky news', 'bloomberg', 'cnbc', 'reuters', 'חדשות'],
   movies: ['movie', 'movies', 'cinema', 'film', 'hbo', 'showtime', 'starz', 'cinemax', 'epix', 'tcm', 'amc', 'fx', 'syfy', 'sci-fi', 'סרטים'],
-  kids: ['kids', 'children', 'cartoon', 'disney', 'nickelodeon', 'nick', 'cartoon network', 'boomerang', 'pbs kids', 'baby', 'junior', 'ילדים', 'ניק', 'דיסני'],
+  kids: ['kids', 'children', 'cartoon', 'disney', 'nickelodeon', 'nick', 'cartoon network', 'boomerang', 'pbs kids', 'baby', 'junior', 'ילדים', 'ניק', 'דיסני', 'הופ'],
   music: ['music', 'mtv', 'vh1', 'bet', 'trace', 'mcm', 'fm', 'radio', 'מוזיקה'],
 };
 
@@ -84,29 +84,42 @@ function detectCategory(channel) {
   return 'general';
 }
 
-// Check if channel is Israeli (Hebrew text or Israeli keywords)
+// Israeli channel detection
+const ISRAELI_KEYWORDS = [
+  'israel', 'israeli', 'ישראל', 'עידן פלוס', 'idan plus',
+  'ערוץ 1', 'ערוץ 2', 'ערוץ 10', 'ערוץ 11', 'ערוץ 12', 'ערוץ 13', 'ערוץ 14',
+  'ערוץ1', 'ערוץ2', 'ערוץ10', 'ערוץ11', 'ערוץ12', 'ערוץ13', 'ערוץ14',
+  'kan', 'כאן', 'keshet', 'קשת', 'reshet', 'רשת', 'mako',
+  'channel 1', 'channel 2', 'channel 10', 'channel 11', 'channel 12', 'channel 13', 'channel 14',
+  'sport 1', 'sport 2', 'sport 3', 'sport 4', 'sport 5',
+  'ספורט 1', 'ספורט 2', 'ספורט 3', 'ספורט 4', 'ספורט 5',
+  'now 14', 'חדשות', 'החינוכית', 'מכאן', 'one', 'two', 'ten',
+  'hot', 'yes', 'cellcom', 'partner', 'shalva', 'שלבה',
+];
+
+const ISRAELI_TVG_IDS = [
+  'Kan11', 'Keshet12', 'Reshet13', 'Now14', 'Channel1', 'Channel2',
+  'Channel10', 'Channel11', 'Channel12', 'Channel13', 'Channel14',
+  'Sport1', 'Sport2', 'Sport3', 'Sport4', 'Sport5',
+  'IsraelPlus', 'IdanPlus', 'Hinuchit',
+];
+
 function isIsraeliChannel(channel) {
   const text = `${channel.name} ${channel.group} ${channel.tvgId}`.toLowerCase();
 
-  // Hebrew characters
+  // Hebrew characters check
   const hasHebrew = /[\u0590-\u05FF]/.test(channel.name + channel.group);
   if (hasHebrew) return true;
 
-  // Israeli keywords
-  const israeliKeywords = [
-    'israel', 'israeli', 'ישראל', 'ערוץ', 'חדשות', 'ספורט', 'ילדים',
-    'מוזיקה', 'קשת', 'רשת', 'כאן', 'הטלוויזיה', 'החינוכית',
-    'mako', 'keshet', 'reshet', 'kan', 'channel 1', 'channel 2',
-    'channel 10', 'channel 11', 'channel 12', 'channel 13', 'channel 14',
-    ' ערוץ 1', ' ערוץ 2', ' ערוץ 10', ' ערוץ 11', ' ערוץ 12', ' ערוץ 13', ' ערוץ 14',
-    ' ערוץ1', ' ערוץ2', ' ערוץ10', ' ערוץ11', ' ערוץ12', ' ערוץ13', ' ערוץ14',
-    'sport 1', 'sport 2', 'sport 3', 'sport 4', 'sport 5',
-    'ספורט 1', 'ספורט 2', 'ספורט 3', 'ספורט 4', 'ספורט 5',
-    'one', 'two', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
-  ];
-
-  for (const kw of israeliKeywords) {
+  // Keyword matching
+  for (const kw of ISRAELI_KEYWORDS) {
     if (text.includes(kw.toLowerCase())) return true;
+  }
+
+  // TVG-ID matching
+  const tvgIdLower = (channel.tvgId || '').toLowerCase();
+  for (const id of ISRAELI_TVG_IDS) {
+    if (tvgIdLower.includes(id.toLowerCase())) return true;
   }
 
   return false;
@@ -114,7 +127,7 @@ function isIsraeliChannel(channel) {
 
 export async function fetchM3U(url) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
   try {
     const response = await fetch(url, { signal: controller.signal });
@@ -134,7 +147,7 @@ export async function fetchM3U(url) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error('הזמן לטעינת הרשימה פג (3 שניות) — בדוק את החיבור');
+      throw new Error('הזמן לטעינת הרשימה פג (5 שניות) — בדוק את החיבור');
     }
     throw err;
   }
@@ -145,6 +158,7 @@ export function getCategories(channels) {
   return ['all', ...Array.from(cats).sort()];
 }
 
+// Deprecated: use epgParser.js instead for real EPG
 export function generateMockEPG(channel, offset = 0) {
   const now = new Date();
   now.setMinutes(now.getMinutes() + offset * 30);

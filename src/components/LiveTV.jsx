@@ -12,10 +12,12 @@ import {
   Star,
   Filter,
   Tv,
+  ChevronDown,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.jsx';
 import LiveTVPlayer from './LiveTVPlayer.jsx';
-import { fetchM3U, getCategories, generateMockEPG } from '../utils/m3uParser.js';
+import { fetchM3U, getCategories } from '../utils/m3uParser.js';
+import { fetchEPG, getChannelEPG, formatEPGTime } from '../utils/epgParser.js';
 
 const CATEGORY_LABELS = {
   all: 'הכל',
@@ -36,9 +38,15 @@ const CATEGORY_ICONS = {
   general: '📺',
 };
 
+const IPTV_SOURCES = [
+  { id: 'tvteam', name: 'tv.team', placeholder: 'https://tv.team/playlist.m3u?token=...' },
+  { id: 'shalva', name: 'Shalva IPTV', placeholder: 'https://shalvaiptv.com/playlist.m3u?user=...' },
+];
+
 function LiveTV() {
   const { tvSettings, setTvSettings } = useApp();
   const [showUrlInput, setShowUrlInput] = useState(false);
+  const [selectedSource, setSelectedSource] = useState(tvSettings?.source || 'tvteam');
   const [m3uUrl, setM3uUrl] = useState(tvSettings?.m3uUrl || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -46,6 +54,8 @@ function LiveTV() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showEpg, setShowEpg] = useState(false);
+  const [epgData, setEpgData] = useState([]);
+  const [epgLoading, setEpgLoading] = useState(false);
   const [favorites, setFavorites] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('sb-tv-favorites') || '[]');
@@ -56,6 +66,24 @@ function LiveTV() {
 
   const channels = tvSettings?.channels || [];
   const categories = useMemo(() => getCategories(channels), [channels]);
+
+  // Load EPG on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function loadEPG() {
+      setEpgLoading(true);
+      try {
+        const data = await fetchEPG();
+        if (!cancelled) setEpgData(data);
+      } catch (e) {
+        console.warn('EPG load failed:', e);
+      } finally {
+        if (!cancelled) setEpgLoading(false);
+      }
+    }
+    loadEPG();
+    return () => { cancelled = true; };
+  }, []);
 
   const filteredChannels = useMemo(() => {
     let result = channels;
@@ -79,14 +107,14 @@ function LiveTV() {
     setError(null);
     try {
       const parsed = await fetchM3U(m3uUrl.trim());
-      setTvSettings({ m3uUrl: m3uUrl.trim(), channels: parsed });
+      setTvSettings({ source: selectedSource, m3uUrl: m3uUrl.trim(), channels: parsed });
       setShowUrlInput(false);
     } catch (err) {
       setError(err.message || 'טעינת הרשימה נכשלה');
     } finally {
       setIsLoading(false);
     }
-  }, [m3uUrl, setTvSettings]);
+  }, [m3uUrl, selectedSource, setTvSettings]);
 
   const toggleFavorite = useCallback((channelId) => {
     setFavorites((prev) => {
@@ -98,8 +126,7 @@ function LiveTV() {
     });
   }, []);
 
-  const formatTime = (date) =>
-    date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const currentSource = IPTV_SOURCES.find((s) => s.id === selectedSource) || IPTV_SOURCES[0];
 
   return (
     <div className="page-transition px-4 py-6 max-w-5xl mx-auto">
@@ -129,7 +156,7 @@ function LiveTV() {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-sb-gray uppercase tracking-wider">
-                כתובת רשימת M3U
+                הגדרות מקור IPTV
               </h2>
               <button
                 onClick={() => setShowUrlInput(false)}
@@ -139,15 +166,38 @@ function LiveTV() {
               </button>
             </div>
 
+            {/* Source selector */}
+            <div className="mb-4">
+              <label className="text-xs text-sb-gray mb-2 block">בחר ספק IPTV</label>
+              <div className="flex gap-2">
+                {IPTV_SOURCES.map((source) => (
+                  <button
+                    key={source.id}
+                    onClick={() => {
+                      setSelectedSource(source.id);
+                      setM3uUrl('');
+                    }}
+                    className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      selectedSource === source.id
+                        ? 'bg-sb-red text-white'
+                        : 'bg-sb-surface text-sb-gray hover:text-white'
+                    }`}
+                  >
+                    {source.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <p className="text-xs text-sb-gray mb-3">
               הדבק כאן את כתובת רשימת ה-M3U שלך מ{' '}
               <a
-                href="https://tv.team/packages"
+                href={selectedSource === 'shalva' ? 'https://shalvaiptv.com/' : 'https://tv.team/packages'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sb-red hover:underline inline-flex items-center gap-1"
               >
-                tv.team <ExternalLink className="w-3 h-3" />
+                {currentSource.name} <ExternalLink className="w-3 h-3" />
               </a>
             </p>
 
@@ -155,7 +205,7 @@ function LiveTV() {
               type="url"
               value={m3uUrl}
               onChange={(e) => setM3uUrl(e.target.value)}
-              placeholder="https://tv.team/playlist.m3u?token=..."
+              placeholder={currentSource.placeholder}
               className="w-full bg-sb-black border border-sb-border rounded-xl px-4 py-3 text-sm text-white placeholder-sb-gray focus:outline-none focus:border-sb-red/60 mb-3"
             />
 
@@ -180,6 +230,22 @@ function LiveTV() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Israeli filter badge */}
+      {channels.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sb-red/10 border border-sb-red/30 text-sb-red text-xs font-medium">
+            🇮🇱 ערוצים ישראליים בלבד
+          </span>
+          <span className="text-xs text-sb-gray">{channels.length} ערוצים נמצאו</span>
+          {epgLoading && (
+            <span className="text-xs text-sb-gray flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              טוען EPG...
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Player */}
       <AnimatePresence>
@@ -261,32 +327,7 @@ function LiveTV() {
                       <Clock className="w-4 h-4" />
                       לוח שידורים
                     </h3>
-                    <div className="space-y-2">
-                      {generateMockEPG(selectedChannel).map((program, idx) => (
-                        <div
-                          key={idx}
-                          className={`flex items-center gap-3 p-2 rounded-xl text-sm ${
-                            program.isCurrent
-                              ? 'bg-sb-red/10 border border-sb-red/30'
-                              : 'border border-transparent'
-                          }`}
-                        >
-                          <div className="text-xs text-sb-gray whitespace-nowrap">
-                            {formatTime(program.start)}
-                          </div>
-                          <div className="flex-1">
-                            <p className={`font-medium ${program.isCurrent ? 'text-sb-red' : 'text-sb-light'}`}>
-                              {program.title}
-                            </p>
-                          </div>
-                          {program.isCurrent && (
-                            <span className="text-[10px] bg-sb-red text-white px-2 py-0.5 rounded-full">
-                              שידור חי
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <EPGDisplay channel={selectedChannel} epgData={epgData} />
                   </div>
                 </motion.div>
               )}
@@ -294,16 +335,6 @@ function LiveTV() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Israeli filter badge */}
-      {channels.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sb-red/10 border border-sb-red/30 text-sb-red text-xs font-medium">
-            🇮🇱 ערוצים ישראליים בלבד
-          </span>
-          <span className="text-xs text-sb-gray">{channels.length} ערוצים נמצאו</span>
-        </div>
-      )}
 
       {/* Search & Filters */}
       {channels.length > 0 && (
@@ -417,7 +448,7 @@ function LiveTV() {
           </div>
           <h2 className="text-lg font-semibold text-white mb-2">אין ערוצים טעונים</h2>
           <p className="text-sm text-sb-gray max-w-xs mb-6">
-            הוסף כתובת M3U מ-tv.team כדי להתחיל לצפות בטלוויזיה חיה.
+            הוסף כתובת M3U מ-tv.team או Shalva IPTV כדי להתחיל לצפות בטלוויזיה חיה.
           </p>
           <button
             onClick={() => setShowUrlInput(true)}
@@ -426,17 +457,72 @@ function LiveTV() {
             <LinkIcon className="w-4 h-4" />
             הוסף כתובת רשימה
           </button>
-          <a
-            href="https://tv.team/packages"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 text-xs text-sb-red hover:underline flex items-center gap-1"
-          >
-            קבל רשימה מ-tv.team
-            <ExternalLink className="w-3 h-3" />
-          </a>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+function EPGDisplay({ channel, epgData }) {
+  const programs = useMemo(() => {
+    return getChannelEPG(epgData, channel.tvgId, channel.name);
+  }, [epgData, channel]);
+
+  if (programs.length === 0) {
+    return (
+      <div className="text-center text-sb-gray text-sm py-4">
+        אין נתוני תוכנית לערוץ זה
+      </div>
+    );
+  }
+
+  const now = new Date();
+
+  return (
+    <div className="space-y-2">
+      {programs.map((program, idx) => {
+        const progress = program.isCurrent && program.stop > program.start
+          ? ((now - program.start) / (program.stop - program.start)) * 100
+          : 0;
+
+        return (
+          <div
+            key={idx}
+            className={`flex flex-col gap-1 p-2 rounded-xl text-sm ${
+              program.isCurrent
+                ? 'bg-sb-red/10 border border-sb-red/30'
+                : 'border border-transparent'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-sb-gray whitespace-nowrap">
+                {formatEPGTime(program.start)}
+              </div>
+              <div className="flex-1">
+                <p className={`font-medium ${program.isCurrent ? 'text-sb-red' : 'text-sb-light'}`}>
+                  {program.title}
+                </p>
+                {program.description && (
+                  <p className="text-xs text-sb-gray line-clamp-1">{program.description}</p>
+                )}
+              </div>
+              {program.isCurrent && (
+                <span className="text-[10px] bg-sb-red text-white px-2 py-0.5 rounded-full shrink-0">
+                  שידור חי
+                </span>
+              )}
+            </div>
+            {program.isCurrent && (
+              <div className="w-full h-1 bg-sb-surface rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-sb-red rounded-full transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

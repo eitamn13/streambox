@@ -9,7 +9,7 @@ import SubtitleOverlay from './SubtitleOverlay.jsx';
 import {
   ArrowRight, Maximize, Minimize, Volume2, VolumeX, Play, Pause,
   Settings as SettingsIcon, Subtitles, Loader2, MonitorPlay,
-  AlertCircle, RefreshCw, Crown
+  AlertCircle, RefreshCw, Crown, RotateCcw, RotateCw, Type, Palette
 } from 'lucide-react';
 
 let Hls = null;
@@ -37,6 +37,11 @@ function Player() {
   const [showSettings, setShowSettings] = useState(false);
   const [showStreamPicker, setShowStreamPicker] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(false);
+  const [showSubStyle, setShowSubStyle] = useState(false);
+  const [subStyle, setSubStyle] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sb-sub-style') || '{"fontSize":"medium","color":"#ffffff","bgOpacity":"0.8"}'); }
+    catch { return { fontSize: 'medium', color: '#ffffff', bgOpacity: '0.8' }; }
+  });
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState(null);
   const [hlsInstance, setHlsInstance] = useState(null);
@@ -380,6 +385,13 @@ function Player() {
     resetControlsTimeout();
   };
 
+  const skip = useCallback((seconds) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = Math.max(0, Math.min(video.currentTime + seconds, duration || video.duration));
+    resetControlsTimeout();
+  }, [duration, resetControlsTimeout]);
+
   const toggleFullscreen = () => {
     const el = containerRef.current;
     if (!el) return;
@@ -396,6 +408,42 @@ function Player() {
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          skip(-10);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skip(10);
+          break;
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'm':
+        case 'M':
+          setMuted(m => !m);
+          break;
+        case 'f':
+        case 'F':
+          toggleFullscreen();
+          break;
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [skip, togglePlay]);
+
+  // Persist subtitle style
+  useEffect(() => {
+    localStorage.setItem('sb-sub-style', JSON.stringify(subStyle));
+  }, [subStyle]);
 
   const formatTime = (t) => {
     if (!t || isNaN(t)) return '0:00';
@@ -656,9 +704,19 @@ function Player() {
 
           {/* Buttons */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button onClick={() => skip(-10)} className="text-white hover:text-sb-red transition-colors p-1" title="10 שניות אחורה">
+                <RotateCcw className="w-4 h-4" />
+                <span className="text-[9px] block text-center -mt-1">10</span>
+              </button>
+
               <button onClick={togglePlay} className="text-white hover:text-sb-red transition-colors">
                 {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+              </button>
+
+              <button onClick={() => skip(10)} className="text-white hover:text-sb-red transition-colors p-1" title="10 שניות קדימה">
+                <RotateCw className="w-4 h-4" />
+                <span className="text-[9px] block text-center -mt-1">10</span>
               </button>
 
               <div className="flex items-center gap-2 group">
@@ -701,6 +759,13 @@ function Player() {
                 <Subtitles className="w-5 h-5" />
               </button>
               <button
+                onClick={() => { setShowSubStyle(!showSubStyle); resetControlsTimeout(); }}
+                className={`p-2 rounded-lg transition-colors ${showSubStyle ? 'bg-sb-red text-white' : 'text-white hover:text-sb-red'}`}
+                title="סגנון כתוביות"
+              >
+                <Type className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => { setShowSettings(!showSettings); resetControlsTimeout(); }}
                 className="text-white hover:text-sb-red transition-colors"
               >
@@ -732,6 +797,78 @@ function Player() {
                     {lvl.height}p
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Subtitle Style Settings */}
+          {showSubStyle && (
+            <div className="mt-3 p-3 bg-sb-surface rounded-lg animate-fade-in">
+              <p className="text-white text-sm mb-3 flex items-center gap-2">
+                <Palette className="w-4 h-4" />
+                סגנון כתוביות
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sb-gray text-xs mb-1.5 block">גודל טקסט</label>
+                  <div className="flex gap-2">
+                    {[
+                      { val: 'small', label: 'קטן' },
+                      { val: 'medium', label: 'בינוני' },
+                      { val: 'large', label: 'גדול' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setSubStyle(s => ({ ...s, fontSize: opt.val }))}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          subStyle.fontSize === opt.val ? 'bg-sb-red text-white' : 'bg-sb-card text-sb-light hover:bg-sb-border'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sb-gray text-xs mb-1.5 block">צבע טקסט</label>
+                  <div className="flex gap-2">
+                    {[
+                      { val: '#ffffff', label: 'לבן' },
+                      { val: '#f5c518', label: 'צהוב' },
+                      { val: '#46d369', label: 'ירוק' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setSubStyle(s => ({ ...s, color: opt.val }))}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          subStyle.color === opt.val ? 'bg-sb-red text-white' : 'bg-sb-card text-sb-light hover:bg-sb-border'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sb-gray text-xs mb-1.5 block">שקיפות רקע</label>
+                  <div className="flex gap-2">
+                    {[
+                      { val: '0', label: 'ללא' },
+                      { val: '0.5', label: 'חצי' },
+                      { val: '0.8', label: 'כהה' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        onClick={() => setSubStyle(s => ({ ...s, bgOpacity: opt.val }))}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          subStyle.bgOpacity === opt.val ? 'bg-sb-red text-white' : 'bg-sb-card text-sb-light hover:bg-sb-border'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
