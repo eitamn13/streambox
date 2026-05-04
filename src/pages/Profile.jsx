@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { supabase } from '../lib/supabase';
+import { apiCreatePortal } from '../lib/api.js';
 import {
   User, Mail, Calendar, LogOut, ChevronLeft, Loader2,
   Save, CheckCircle, AlertCircle, Crown, RefreshCw, CreditCard, Gift
@@ -20,6 +21,7 @@ export default function Profile() {
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('checkout') === 'success') {
@@ -52,6 +54,19 @@ export default function Profile() {
     setRefreshing(false);
   };
 
+  const handleManageBilling = async () => {
+    setOpeningPortal(true);
+    try {
+      const result = await apiCreatePortal();
+      if (result.url) {
+        window.location.href = result.url;
+      }
+    } catch (e) {
+      setError(e.message || 'Failed to open billing portal');
+      setOpeningPortal(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -77,7 +92,12 @@ export default function Profile() {
           <h2 className="text-white font-semibold">{user?.user_metadata?.full_name || 'משתמש'}</h2>
           <p className="text-sb-gray text-sm">{user?.email}</p>
           <div className="mt-3 flex items-center justify-center gap-2">
-            {isTrialing ? (
+            {subscription?.is_admin ? (
+              <span className="inline-flex items-center gap-1 bg-sb-gold/20 text-sb-gold text-xs font-bold px-3 py-1 rounded-full">
+                <Crown className="w-3 h-3" />
+                מנהל
+              </span>
+            ) : isTrialing ? (
               <span className="inline-flex items-center gap-1 bg-sb-blue/20 text-sb-blue text-xs font-bold px-3 py-1 rounded-full">
                 <Gift className="w-3 h-3" />
                 בתקופת ניסיון
@@ -135,7 +155,18 @@ export default function Profile() {
             )}
           </div>
 
-          {!isPremium && !isTrialing && (
+          {isPremium && (
+            <button
+              onClick={handleManageBilling}
+              disabled={openingPortal}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-sb-surface hover:bg-sb-border text-white rounded-xl text-sm font-bold transition-colors"
+            >
+              {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+              נהל תשלום
+            </button>
+          )}
+
+          {!isPremium && !isTrialing && !subscription?.is_admin && (
             <Link
               to="/subscription"
               className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-sb-purple hover:bg-sb-purple/80 text-white rounded-xl text-sm font-bold transition-colors"

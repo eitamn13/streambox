@@ -1,0 +1,188 @@
+// StreamBox API Client — talks to the new VPS backend
+// =====================================================
+
+const API_URL = (() => {
+  const env = import.meta.env?.VITE_API_URL;
+  if (env && !env.includes('your_')) return env.replace(/\/$/, '');
+  // Default fallback (same domain — for self-hosted mode)
+  return '';
+})();
+
+function getToken() {
+  try {
+    return localStorage.getItem('sb-token') || '';
+  } catch { return ''; }
+}
+
+async function fetchApi(path, options = {}) {
+  const url = `${API_URL}${path}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  const token = getToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401) {
+    // Token expired — clear and let app handle re-auth
+    localStorage.removeItem('sb-token');
+    window.dispatchEvent(new CustomEvent('api:unauthorized'));
+  }
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const error = new Error(data?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
+}
+
+// Auth
+export async function apiRegister({ email, password, fullName }) {
+  const data = await fetchApi('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, fullName }),
+  });
+  if (data.accessToken) {
+    localStorage.setItem('sb-token', data.accessToken);
+    localStorage.setItem('sb-refresh-token', data.refreshToken);
+  }
+  return data;
+}
+
+export async function apiLogin({ email, password }) {
+  const data = await fetchApi('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  if (data.accessToken) {
+    localStorage.setItem('sb-token', data.accessToken);
+    localStorage.setItem('sb-refresh-token', data.refreshToken);
+  }
+  return data;
+}
+
+export async function apiLogout() {
+  const refreshToken = localStorage.getItem('sb-refresh-token');
+  try {
+    await fetchApi('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch { /* ignore */ }
+  localStorage.removeItem('sb-token');
+  localStorage.removeItem('sb-refresh-token');
+  localStorage.removeItem('sb-session');
+  localStorage.removeItem('sb_subscription');
+}
+
+export async function apiRefreshToken() {
+  const refreshToken = localStorage.getItem('sb-refresh-token');
+  if (!refreshToken) throw new Error('No refresh token');
+  const data = await fetchApi('/api/auth/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (data.accessToken) {
+    localStorage.setItem('sb-token', data.accessToken);
+    if (data.refreshToken) localStorage.setItem('sb-refresh-token', data.refreshToken);
+  }
+  return data;
+}
+
+export async function apiMe() {
+  return fetchApi('/api/auth/me');
+}
+
+export async function apiChangePassword({ currentPassword, newPassword }) {
+  return fetchApi('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export async function apiForgotPassword(email) {
+  return fetchApi('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function apiResetPassword({ token, password }) {
+  return fetchApi('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+// Profile update — backend doesn't support metadata update yet, but we keep signature
+export async function apiUpdateProfile({ fullName }) {
+  // Placeholder: backend doesn't have profile update endpoint yet
+  // Could be added to auth/me PATCH later
+  console.warn('apiUpdateProfile not implemented in backend yet');
+  return { success: true };
+}
+
+// Payments
+export async function apiCreateCheckout(priceId) {
+  return fetchApi('/api/payments/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ priceId }),
+  });
+}
+
+export async function apiGetSubscription() {
+  return fetchApi('/api/payments/subscription');
+}
+
+export async function apiCreatePortal() {
+  return fetchApi('/api/payments/portal', { method: 'POST' });
+}
+
+export async function apiCancelSubscription() {
+  return fetchApi('/api/payments/cancel', { method: 'POST' });
+}
+
+// Debrid
+export async function apiGetDebridKey() {
+  return fetchApi('/api/debrid/key');
+}
+
+export async function apiProxyDebrid(service, path, options = {}) {
+  return fetchApi(`/api/debrid/${service}${path}`, options);
+}
+
+// Admin
+export async function apiGetAdminUsers(page = 1, limit = 50) {
+  return fetchApi(`/api/admin/users?page=${page}&limit=${limit}`);
+}
+
+export async function apiGetAdminStats() {
+  return fetchApi('/api/admin/stats');
+}
+
+export async function apiUpdateUserPlan(userId, plan, status) {
+  return fetchApi(`/api/admin/users/${userId}/plan`, {
+    method: 'PATCH',
+    body: JSON.stringify({ plan, status }),
+  });
+}
+
+// Health check
+export async function apiHealth() {
+  return fetchApi('/api/health');
+}
+
+export { API_URL };

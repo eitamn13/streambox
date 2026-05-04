@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { apiForgotPassword, apiResetPassword } from '../lib/api.js';
 import { Mail, ArrowLeft, Tv, Loader2, CheckCircle } from 'lucide-react';
 
 export default function ResetPassword() {
@@ -13,14 +13,13 @@ export default function ResetPassword() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      await apiForgotPassword(email);
       setSent(true);
+    } catch (err) {
+      setError(err.message || 'Failed to send reset email');
+    } finally {
+      setLoading(false);
     }
   };
 

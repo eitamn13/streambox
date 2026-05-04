@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, getAuthToken } from '../lib/supabase';
+import { getAuthToken } from '../lib/supabase';
 import {
   fetchSubscription,
   getCustomerKey,
@@ -18,25 +18,14 @@ const SubscriptionContext = createContext(null);
 export function SubscriptionProvider({ children }) {
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [session, setSessionState] = useState(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSessionState(data.session);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSessionState(newSession);
-    });
-    return () => listener?.subscription?.unsubscribe();
-  }, []);
-
-  // Load subscription on mount AND when session changes
+  // Load subscription on mount
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       try {
-        const token = session?.access_token || await getAuthToken();
+        const token = await getAuthToken();
         const sub = await fetchSubscription(token);
         if (!cancelled) {
           setSubscription(sub);
@@ -50,9 +39,9 @@ export function SubscriptionProvider({ children }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [session]);
+  }, []);
 
-  // Also try loading immediately on mount (in case session loads async)
+  // Also try loading after a short delay (in case auth loads async)
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -73,22 +62,33 @@ export function SubscriptionProvider({ children }) {
   }, []);
 
   const refreshSubscription = useCallback(async () => {
-    const token = session?.access_token || await getAuthToken();
+    const token = await getAuthToken();
     const sub = await fetchSubscription(token);
     setSubscription(sub);
     if (sub?.customer_key) setCustomerKey(sub.customer_key);
     return sub;
-  }, [session]);
+  }, []);
 
   const checkout = useCallback(async (priceId) => {
-    const userId = session?.user?.id;
-    const email = session?.user?.email;
+    const token = await getAuthToken();
+    if (!token) throw new Error('Must be logged in to subscribe');
+    // Get user info from session or localStorage
+    let email = '';
+    let userId = '';
+    try {
+      const sessionRaw = localStorage.getItem('sb-session');
+      if (sessionRaw) {
+        const session = JSON.parse(sessionRaw);
+        email = session.user?.email || '';
+        userId = session.user?.id || '';
+      }
+    } catch { /* ignore */ }
     const result = await createCheckoutSession(priceId, email, userId);
     if (result.url) {
       window.location.href = result.url;
     }
     return result;
-  }, [session]);
+  }, []);
 
   const watchCheck = useCallback(() => {
     return canWatchMovie(subscription);

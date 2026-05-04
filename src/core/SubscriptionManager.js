@@ -1,6 +1,16 @@
 // Subscription Manager — Premium SaaS Gates
 // ==========================================
 
+const API_URL = (() => {
+  const env = import.meta.env?.VITE_API_URL;
+  if (env && !env.includes('your_')) return env.replace(/\/$/, '');
+  return '';
+})();
+
+function api(path) {
+  return `${API_URL}${path}`;
+}
+
 export const PLANS = {
   free: {
     id: 'free',
@@ -67,7 +77,7 @@ export async function fetchSubscription(authToken) {
     return { plan: 'free', status: 'none', is_premium: false };
   }
   try {
-    const res = await fetch('/api/subscription', {
+    const res = await fetch(api('/api/payments/subscription'), {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -104,9 +114,13 @@ export function filterStreamsByPlan(streams) {
 
 // Stripe checkout
 export async function createCheckoutSession(priceId, email, userId) {
-  const res = await fetch('/api/stripe', {
+  const token = await getAuthToken();
+  const res = await fetch(api('/api/payments/checkout'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ priceId, customerEmail: email, userId }),
   });
   if (!res.ok) {

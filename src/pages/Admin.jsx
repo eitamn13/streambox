@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext.jsx';
-import { supabase } from '../lib/supabase';
+import { apiGetAdminStats, apiGetAdminUsers } from '../lib/api.js';
 import {
   ArrowLeft, Users, Crown, CreditCard, Activity, Loader2,
   AlertCircle, CheckCircle, XCircle, Server, Key, RefreshCw
@@ -19,21 +19,23 @@ export default function Admin() {
     setLoading(true);
     setError(null);
     try {
-      const token = session?.access_token;
-      if (!token) {
+      if (!session) {
         setError('לא מחובר');
         return;
       }
-      const res = await fetch('/api/admin', {
-        headers: { Authorization: `Bearer ${token}` },
+      const [statsData, usersData] = await Promise.all([
+        apiGetAdminStats(),
+        apiGetAdminUsers(1, 50),
+      ]);
+      setStats({
+        totalUsers: statsData.totalUsers,
+        activePremium: statsData.premiumUsers,
+        trialing: 0, // Backend doesn't track trialing separately yet
+        monthlyRevenue: statsData.activeSubscriptions * 35, // rough estimate
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Admin fetch failed');
-      }
-      setStats(data.stats);
-      setDebrid(data.debrid);
-      setRecentUsers(data.recentUsers || []);
+      setRecentUsers(usersData.users || []);
+      // Debrid status is not in new backend yet
+      setDebrid({ realdebrid: !!import.meta.env.VITE_ADMIN_RD_API_KEY, premiumize: false, torbox: false });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -184,8 +186,8 @@ export default function Admin() {
               </thead>
               <tbody>
                 {recentUsers.map((user) => (
-                  <tr key={user.user_id} className="border-b border-sb-border/50 hover:bg-sb-surface/50 transition-colors">
-                    <td className="px-4 py-3 text-sb-light">{user.email || user.user_id.slice(0, 8)}</td>
+                  <tr key={user.id || user.user_id} className="border-b border-sb-border/50 hover:bg-sb-surface/50 transition-colors">
+                    <td className="px-4 py-3 text-sb-light">{user.email || user.user_id?.slice(0, 8)}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-bold px-2 py-1 rounded-full ${
                         user.plan === 'premium'
