@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getAuthToken } from '../lib/supabase';
 import {
   fetchSubscription,
   getCustomerKey,
@@ -13,6 +12,12 @@ import {
   createCheckoutSession,
 } from '../core/SubscriptionManager.js';
 
+function getToken() {
+  try {
+    return localStorage.getItem('sb-token') || '';
+  } catch { return ''; }
+}
+
 const SubscriptionContext = createContext(null);
 
 export function SubscriptionProvider({ children }) {
@@ -25,7 +30,7 @@ export function SubscriptionProvider({ children }) {
     async function load() {
       setLoading(true);
       try {
-        const token = await getAuthToken();
+        const token = getToken();
         const sub = await fetchSubscription(token);
         if (!cancelled) {
           setSubscription(sub);
@@ -45,7 +50,7 @@ export function SubscriptionProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const token = await getAuthToken();
+      const token = getToken();
       if (!token) return;
       try {
         const sub = await fetchSubscription(token);
@@ -62,7 +67,7 @@ export function SubscriptionProvider({ children }) {
   }, []);
 
   const refreshSubscription = useCallback(async () => {
-    const token = await getAuthToken();
+    const token = getToken();
     const sub = await fetchSubscription(token);
     setSubscription(sub);
     if (sub?.customer_key) setCustomerKey(sub.customer_key);
@@ -70,7 +75,7 @@ export function SubscriptionProvider({ children }) {
   }, []);
 
   const checkout = useCallback(async (priceId) => {
-    const token = await getAuthToken();
+    const token = getToken();
     if (!token) throw new Error('Must be logged in to subscribe');
     // Get user info from session or localStorage
     let email = '';

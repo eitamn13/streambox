@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
-import { setAuthToken } from '../lib/supabase';
+import { apiLogin } from '../lib/api.js';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
-
-// API URL - משתמש ב-VITE_API_URL אם מוגדר, אחרת ברירת מחדל
-const API_URL = import.meta.env.VITE_API_URL || 'http://138.197.176.208';
 
 export default function Login() {
   const { setSession } = useApp();
@@ -26,56 +23,26 @@ export default function Login() {
     console.log('[Login] Attempting login for:', email);
     
     try {
-      // שליחת login ל-backend החדש
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      
-      console.log('[Login] Response status:', res.status);
-      const data = await res.json();
+      const data = await apiLogin({ email, password });
       console.log('[Login] Response data:', data);
-      
+
       setLoading(false);
-      
-      if (!res.ok) {
-        console.error('[Login] Error:', data.message || 'Login failed');
-        setError(data.message || 'Invalid login credentials');
+
+      if (data.error || data.message) {
+        console.error('[Login] Error:', data.message || data.error);
+        setError(data.message || data.error || 'Invalid login credentials');
         return;
       }
-      
+
       console.log('[Login] Success, token:', data.token?.substring(0, 30) + '...');
-      
-      // יצירת session בפורמט ש-AppContext מצפה לו
+
       const session = {
         user: data.user,
         access_token: data.token,
-        refresh_token: data.refreshToken
+        refresh_token: data.refreshToken,
       };
-      
+
       setSession(session);
-      
-      if (data.token) {
-        try {
-          console.log('[Login] About to call setAuthToken...');
-          setAuthToken(data.token);
-          const saved = localStorage.getItem('sb-token');
-          console.log('[Login] After setAuthToken, sb-token in localStorage:', saved ? saved.substring(0, 30) + '...' : 'NULL');
-          
-          // בדיקה אחרי tick
-          setTimeout(() => {
-            const afterTick = localStorage.getItem('sb-token');
-            if (!afterTick) console.warn('[Login] WARNING: sb-token was cleared after 0ms!');
-            else console.log('[Login] sb-token still present after 0ms');
-          }, 0);
-        } catch (storageErr) {
-          console.error('[Login] localStorage save failed:', storageErr);
-        }
-      } else {
-        console.warn('[Login] No token in response!');
-      }
-      
       navigate(redirectTo);
     } catch (err) {
       console.error('[Login] Unexpected error:', err);

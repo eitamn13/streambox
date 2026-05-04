@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
-import { supabase } from '../lib/supabase';
-import { apiCreatePortal } from '../lib/api.js';
+import { apiCreatePortal, apiLogout, apiUpdateProfile } from '../lib/api.js';
 import {
   User, Mail, Calendar, LogOut, ChevronLeft, Loader2,
   Save, CheckCircle, AlertCircle, Crown, RefreshCw, CreditCard, Gift
@@ -36,15 +35,20 @@ export default function Profile() {
     setSaving(true);
     setError(null);
     setMessage(null);
-    const { data, error } = await supabase.auth.updateUser({
-      data: { full_name: name },
-    });
-    setSaving(false);
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      await apiUpdateProfile({ fullName: name });
       setMessage('הפרופיל עודכן בהצלחה');
-      setSession((prev) => ({ ...prev, user: data.user }));
+      setSession((prev) => ({
+        ...prev,
+        user: {
+          ...prev.user,
+          user_metadata: { ...prev.user?.user_metadata, full_name: name },
+        },
+      }));
+    } catch (err) {
+      setError(err.message || 'עדכון הפרופיל נכשל');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -68,7 +72,7 @@ export default function Profile() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await apiLogout();
     setSession(null);
     window.location.href = '/';
   };

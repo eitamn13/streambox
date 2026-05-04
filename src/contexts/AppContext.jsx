@@ -1,15 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, setAuthToken } from '../lib/supabase';
+import { API_URL } from '../lib/api.js';
 
 const AppContext = createContext(null);
-
-const API_URL = (() => {
-  const env = import.meta.env?.VITE_API_URL;
-  if (env && !env.includes('your_')) return env.replace(/\/$/, '');
-  return '';
-})();
-
-const USE_BACKEND = !!API_URL;
 
 export function AppProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -60,51 +52,39 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  // Auth state
+  // Auth state — load from VPS backend
   useEffect(() => {
     let mounted = true;
 
     async function loadSession() {
       try {
-        if (USE_BACKEND) {
-          // Backend mode: load from /api/auth/me
-          const token = localStorage.getItem('sb-token');
-          if (token) {
-            try {
-              const res = await fetch(`${API_URL}/api/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (res.ok) {
-                const data = await res.json();
-                const newSession = {
-                  access_token: token,
-                  user: {
-                    id: data.user.id,
-                    email: data.user.email,
-                    user_metadata: { full_name: data.user.fullName },
-                    created_at: data.user.createdAt,
-                  },
-                };
-                if (mounted) {
-                  setSession(newSession);
-                  setIsAdmin(data.user.isAdmin || false);
-                }
-              } else {
-                // Token invalid
-                localStorage.removeItem('sb-token');
-                localStorage.removeItem('sb-refresh-token');
+        const token = localStorage.getItem('sb-token');
+        if (token) {
+          try {
+            const res = await fetch(`${API_URL}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const newSession = {
+                access_token: token,
+                user: {
+                  id: data.user.id,
+                  email: data.user.email,
+                  user_metadata: { full_name: data.user.fullName },
+                  created_at: data.user.createdAt,
+                },
+              };
+              if (mounted) {
+                setSession(newSession);
+                setIsAdmin(data.user.isAdmin || false);
               }
-            } catch (e) {
-              console.warn('Backend session load failed:', e);
+            } else {
+              localStorage.removeItem('sb-token');
+              localStorage.removeItem('sb-refresh-token');
             }
-          }
-        } else {
-          // Supabase / mock mode
-          const { data } = await supabase.auth.getSession();
-          if (mounted) {
-            setSession(data.session);
-            setIsAdmin(data.session?.user?.email?.includes('admin') || false);
-            if (data.session?.access_token) setAuthToken(data.session.access_token);
+          } catch (e) {
+            console.warn('Backend session load failed:', e);
           }
         }
       } finally {
@@ -114,38 +94,6 @@ export function AppProvider({ children }) {
 
     loadSession();
 
-    if (!USE_BACKEND) {
-      const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
-        console.log('[AppContext] onAuthStateChange event:', event, 'hasSession:', !!newSession);
-        setSession(newSession);
-        setIsAdmin(newSession?.user?.email?.includes('admin') || false);
-        if (newSession?.access_token) {
-          console.log('[AppContext] Auth event:', event, '- syncing token');
-          setAuthToken(newSession.access_token);
-        } else if (event === 'SIGNED_OUT') {
-          console.log('[AppContext] SIGNED_OUT - clearing token');
-          setAuthToken(null);
-        }
-      });
-
-      const syncInterval = setInterval(() => {
-        supabase.auth.getSession().then(({ data }) => {
-          const token = data.session?.access_token;
-          if (token && !localStorage.getItem('sb-token')) {
-            console.log('[AppContext] Re-syncing missing sb-token');
-            setAuthToken(token);
-          }
-        });
-      }, 5000);
-
-      return () => {
-        mounted = false;
-        listener?.subscription?.unsubscribe();
-        clearInterval(syncInterval);
-      };
-    }
-
-    // Backend mode: listen for logout events
     const handleUnauthorized = () => {
       setSession(null);
       setIsAdmin(false);

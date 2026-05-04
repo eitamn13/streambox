@@ -12,7 +12,7 @@ import { DEBRID_SERVICES, getConfiguredDebrids } from '../core/DebridManager.js'
 import { useApp } from '../contexts/AppContext.jsx';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { useTranslation } from '../i18n/index.jsx';
-import { supabase, clearAuthToken } from '../lib/supabase.js';
+import { apiLogout } from '../lib/api.js';
 import {
   Tv, Trash2, RefreshCw, Info, Puzzle, Shield, Lock,
   MonitorPlay, ChevronLeft, Check, Key, Globe, AlertTriangle,
@@ -64,8 +64,7 @@ function Settings() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    clearAuthToken();
+    await apiLogout();
     setSession(null);
   };
 

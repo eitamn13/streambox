@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
-import { supabase, setAuthToken } from '../lib/supabase';
+import { apiRegister } from '../lib/api.js';
 import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
 
 export default function Signup() {
@@ -28,31 +28,21 @@ export default function Signup() {
     setLoading(true);
     console.log('[Signup] Attempting signup for:', email);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } },
-      });
-      console.log('[Signup] Response:', { hasData: !!data, hasError: !!error, session: data?.session });
+      const data = await apiRegister({ email, password, fullName: name });
+      console.log('[Signup] Response:', data);
       setLoading(false);
-      if (error) {
-        console.error('[Signup] Error:', error.message);
-        setError(error.message);
+      if (data.error || data.message) {
+        console.error('[Signup] Error:', data.message || data.error);
+        setError(data.message || data.error || 'Signup failed');
         return;
       }
-      console.log('[Signup] Success, token:', data.session?.access_token);
-      setSession(data.session);
-      if (data.session?.access_token) {
-        try {
-          setAuthToken(data.session.access_token);
-          const saved = localStorage.getItem('sb-token');
-          console.log('[Signup] Token saved, sb-token:', saved ? saved.substring(0, 30) + '...' : 'NULL');
-        } catch (storageErr) {
-          console.error('[Signup] localStorage save failed:', storageErr);
-        }
-      } else {
-        console.warn('[Signup] No access_token in session!');
-      }
+      console.log('[Signup] Success, token:', data.token?.substring(0, 30) + '...');
+      const session = {
+        user: data.user,
+        access_token: data.token,
+        refresh_token: data.refreshToken,
+      };
+      setSession(session);
       navigate(redirectTo);
     } catch (err) {
       console.error('[Signup] Unexpected error:', err);

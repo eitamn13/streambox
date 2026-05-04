@@ -55,8 +55,8 @@ export async function apiRegister({ email, password, fullName }) {
     method: 'POST',
     body: JSON.stringify({ email, password, fullName }),
   });
-  if (data.accessToken) {
-    localStorage.setItem('sb-token', data.accessToken);
+  if (data.token) {
+    localStorage.setItem('sb-token', data.token);
     localStorage.setItem('sb-refresh-token', data.refreshToken);
   }
   return data;
@@ -67,8 +67,8 @@ export async function apiLogin({ email, password }) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  if (data.accessToken) {
-    localStorage.setItem('sb-token', data.accessToken);
+  if (data.token) {
+    localStorage.setItem('sb-token', data.token);
     localStorage.setItem('sb-refresh-token', data.refreshToken);
   }
   return data;
@@ -129,10 +129,10 @@ export async function apiResetPassword({ token, password }) {
 
 // Profile update — backend doesn't support metadata update yet, but we keep signature
 export async function apiUpdateProfile({ fullName }) {
-  // Placeholder: backend doesn't have profile update endpoint yet
-  // Could be added to auth/me PATCH later
-  console.warn('apiUpdateProfile not implemented in backend yet');
-  return { success: true };
+  return fetchApi('/api/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ fullName }),
+  });
 }
 
 // Payments
