@@ -42,7 +42,12 @@ export async function fetchStreams(id, type, title = '', year = '', imdbId = '',
 
     const res = await fetch(`/api/content?${params.toString()}`, { headers });
     if (!res.ok) {
-      console.warn('[StreamEngine] Content API failed:', res.status);
+      try {
+        const errorData = await res.json();
+        console.warn('[StreamEngine] Content API failed:', res.status, errorData);
+      } catch {
+        console.warn('[StreamEngine] Content API failed:', res.status);
+      }
       return [];
     }
     const data = await res.json();

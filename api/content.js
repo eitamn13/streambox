@@ -72,32 +72,64 @@ async function isAdminUser(supabase, user) {
 }
 
 // ------------------------------------------------------------------
-// VPS Auth check (new backend)
+// VPS Auth check (new backend) — tries multiple URLs with detailed logging
 // ------------------------------------------------------------------
+const VPS_URLS = [
+  process.env.VPS_API_URL,
+  'https://streambox.one',
+  'http://138.197.176.208',
+  'https://138.197.176.208',
+].filter(Boolean);
+
 async function checkVpsAuth(token) {
-  try {
-    const res = await fetch(`${VPS_API_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) {
-    console.warn('[content] VPS auth check error:', e.message);
-    return null;
+  for (const url of VPS_URLS) {
+    const fullUrl = `${url}/api/auth/me`;
+    try {
+      console.log(`[content] Trying VPS auth at ${fullUrl}`);
+      const res = await fetch(fullUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: timeoutSignal(5000),
+      });
+      console.log(`[content] VPS auth ${fullUrl} status:`, res.status);
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[content] VPS auth success at ${url}. Has user:`, !!data?.user);
+        return data;
+      }
+      // Log non-OK response text for debugging
+      const text = await res.text().catch(() => '');
+      console.log(`[content] VPS auth ${fullUrl} response:`, text.substring(0, 200));
+    } catch (e) {
+      console.warn(`[content] VPS auth ${fullUrl} error:`, e.name, e.message);
+    }
   }
+  console.warn('[content] All VPS auth URLs failed');
+  return null;
 }
 
 async function checkVpsSubscription(token) {
-  try {
-    const res = await fetch(`${VPS_API_URL}/api/payments/subscription`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (e) {
-    console.warn('[content] VPS subscription check error:', e.message);
-    return null;
+  for (const url of VPS_URLS) {
+    const fullUrl = `${url}/api/payments/subscription`;
+    try {
+      console.log(`[content] Trying VPS subscription at ${fullUrl}`);
+      const res = await fetch(fullUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: timeoutSignal(5000),
+      });
+      console.log(`[content] VPS subscription ${fullUrl} status:`, res.status);
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[content] VPS subscription success at ${url}. Status:`, data?.status);
+        return data;
+      }
+      const text = await res.text().catch(() => '');
+      console.log(`[content] VPS subscription ${fullUrl} response:`, text.substring(0, 200));
+    } catch (e) {
+      console.warn(`[content] VPS subscription ${fullUrl} error:`, e.name, e.message);
+    }
   }
+  console.warn('[content] All VPS subscription URLs failed');
+  return null;
 }
 
 // ------------------------------------------------------------------
@@ -105,25 +137,36 @@ async function checkVpsSubscription(token) {
 // ------------------------------------------------------------------
 async function checkSubscription(req) {
   const authHeader = req.headers.authorization;
+  console.log('[content] checkSubscription called. Has auth header:', !!authHeader);
   if (!authHeader?.startsWith('Bearer ')) {
+    console.log('[content] No Bearer token');
     return { ok: false, plan: 'free', status: 'none', reason: 'לא מחובר' };
   }
 
   const token = authHeader.slice(7);
+  console.log('[content] Token prefix:', token.substring(0, 20) + '...');
 
   // 1. Try VPS auth (new backend)
+  console.log('[content] Step 1: Trying VPS auth...');
   const vpsAuth = await checkVpsAuth(token);
+  console.log('[content] VPS auth result:', vpsAuth ? 'got data' : 'null');
+  
   if (vpsAuth?.user) {
     const user = vpsAuth.user;
     const isAdmin = user.isAdmin || false;
+    console.log('[content] VPS user:', user.email, 'isAdmin:', isAdmin);
     if (isAdmin) {
+      console.log('[content] Admin access granted via VPS');
       return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
     }
 
     // Non-admin: check VPS subscription
+    console.log('[content] Step 2: Checking VPS subscription for non-admin...');
     const vpsSub = await checkVpsSubscription(token);
+    console.log('[content] VPS subscription result:', vpsSub ? 'got data' : 'null');
     if (vpsSub) {
       const isActive = vpsSub.status === 'active' || vpsSub.status === 'trialing';
+      console.log('[content] VPS subscription status:', vpsSub.status, 'isActive:', isActive);
       if (!isActive) {
         return { ok: false, plan: vpsSub.plan || 'free', status: vpsSub.status || 'none', reason: 'נדרש מנוי פעיל' };
       }
@@ -131,17 +174,22 @@ async function checkSubscription(req) {
     }
 
     // If subscription check fails but auth is valid, allow anyway (frontend already gated)
+    console.log('[content] VPS auth valid but no subscription data, allowing');
     return { ok: true, plan: 'premium', status: 'active', userId: user.id };
   }
 
   // 2. Fallback to Supabase (legacy)
+  console.log('[content] Step 3: Falling back to Supabase...');
   const supabase = getSupabase();
+  console.log('[content] Supabase available:', !!supabase);
   if (!supabase) {
+    console.log('[content] No Supabase, using dev fallback');
     return { ok: true, plan: 'premium', status: 'active' }; // Dev fallback
   }
 
   try {
     const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    console.log('[content] Supabase auth result:', { hasUser: !!user, error: authErr?.message });
     if (authErr || !user) {
       return { ok: false, plan: 'free', status: 'none', reason: 'סשן לא תקין' };
     }
@@ -173,6 +221,7 @@ async function checkSubscription(req) {
 
     return { ok: true, plan: sub.plan, status: sub.status, userId: user.id };
   } catch (e) {
+    console.error('[content] Supabase auth error:', e.message);
     return { ok: false, plan: 'free', status: 'none', reason: 'שגיאת אימות' };
   }
 }
@@ -567,13 +616,32 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const { imdbId, type, season, episode, title } = req.query;
+  const authHeader = req.headers.authorization;
+  let subCheck = null;
 
-  // 1. Check subscription
-  const subCheck = await checkSubscription(req);
-  if (!subCheck.ok) {
+  // FAST PATH: Admin bypass — validate VPS token directly, skip all subscription checks
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    console.log('[content] FAST PATH: checking VPS auth for admin bypass...');
+    const vpsAuth = await checkVpsAuth(token);
+    console.log('[content] VPS auth result:', vpsAuth ? { hasUser: !!vpsAuth.user, isAdmin: vpsAuth.user?.isAdmin } : 'null');
+    if (vpsAuth?.user?.isAdmin) {
+      console.log('[content] ADMIN BYPASS ACTIVE — granting immediate access');
+      subCheck = { ok: true, plan: 'premium', status: 'active', isAdmin: true };
+    }
+  }
+
+  // If not admin, run normal subscription check
+  if (!subCheck) {
+    subCheck = await checkSubscription(req);
+    console.log('[content] subCheck result:', { ok: subCheck.ok, plan: subCheck.plan, status: subCheck.status, reason: subCheck.reason, isAdmin: subCheck.isAdmin });
+  }
+
+  if (subCheck.ok !== true) {
     return res.status(403).json({
       error: 'Subscription required',
       message: subCheck.reason,
+      debug: 'Check Vercel logs for VPS auth details',
       redirect: '/subscription',
       count: 0,
       streams: [],
