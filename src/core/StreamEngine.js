@@ -2,7 +2,6 @@
 // ================================================================
 
 import { pluginRegistry } from './PluginRegistry.js';
-import { getAuthToken } from '../lib/supabase.js';
 
 const TMDB_IMG = 'https://image.tmdb.org/t/p';
 
@@ -34,7 +33,7 @@ export async function fetchStreams(id, type, title = '', year = '', imdbId = '',
     // Get auth token if logged in
     let authToken = '';
     try {
-      authToken = await getAuthToken();
+      authToken = localStorage.getItem('sb-token') || '';
     } catch { /* not logged in */ }
     const headers = {};
     if (authToken) {

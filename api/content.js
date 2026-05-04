@@ -5,9 +5,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const ADMIN_RD_KEY = process.env.ADMIN_RD_API_KEY;
-const ADMIN_PM_KEY = process.env.ADMIN_PM_API_KEY;
-const ADMIN_TB_KEY = process.env.ADMIN_TB_API_KEY;
+const ADMIN_RD_KEY = process.env.ADMIN_RD_API_KEY || 'GSQ2DULH2E4SXZNDFQJBCYTZBL3HID3FVMBM7AOELFBAHEEIVLNQ';
+const ADMIN_PM_KEY = process.env.ADMIN_PM_API_KEY || 'w8rwmnmj4yicdp74';
+const ADMIN_TB_KEY = process.env.ADMIN_TB_API_KEY || '4a6beffa-7884-4983-9385-ab6a989a937d';
+
+const VPS_API_URL = process.env.VPS_API_URL || 'https://streambox.one';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -70,7 +72,36 @@ async function isAdminUser(supabase, user) {
 }
 
 // ------------------------------------------------------------------
-// Auth & Subscription check
+// VPS Auth check (new backend)
+// ------------------------------------------------------------------
+async function checkVpsAuth(token) {
+  try {
+    const res = await fetch(`${VPS_API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('[content] VPS auth check error:', e.message);
+    return null;
+  }
+}
+
+async function checkVpsSubscription(token) {
+  try {
+    const res = await fetch(`${VPS_API_URL}/api/payments/subscription`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('[content] VPS subscription check error:', e.message);
+    return null;
+  }
+}
+
+// ------------------------------------------------------------------
+// Auth & Subscription check — VPS first, then Supabase fallback
 // ------------------------------------------------------------------
 async function checkSubscription(req) {
   const authHeader = req.headers.authorization;
@@ -79,6 +110,31 @@ async function checkSubscription(req) {
   }
 
   const token = authHeader.slice(7);
+
+  // 1. Try VPS auth (new backend)
+  const vpsAuth = await checkVpsAuth(token);
+  if (vpsAuth?.user) {
+    const user = vpsAuth.user;
+    const isAdmin = user.isAdmin || false;
+    if (isAdmin) {
+      return { ok: true, plan: 'premium', status: 'active', userId: user.id, isAdmin: true };
+    }
+
+    // Non-admin: check VPS subscription
+    const vpsSub = await checkVpsSubscription(token);
+    if (vpsSub) {
+      const isActive = vpsSub.status === 'active' || vpsSub.status === 'trialing';
+      if (!isActive) {
+        return { ok: false, plan: vpsSub.plan || 'free', status: vpsSub.status || 'none', reason: 'נדרש מנוי פעיל' };
+      }
+      return { ok: true, plan: vpsSub.plan || 'premium', status: vpsSub.status, userId: user.id };
+    }
+
+    // If subscription check fails but auth is valid, allow anyway (frontend already gated)
+    return { ok: true, plan: 'premium', status: 'active', userId: user.id };
+  }
+
+  // 2. Fallback to Supabase (legacy)
   const supabase = getSupabase();
   if (!supabase) {
     return { ok: true, plan: 'premium', status: 'active' }; // Dev fallback

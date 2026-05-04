@@ -21,6 +21,12 @@ const SERVICE_CONFIG = {
   },
 };
 
+const FALLBACK_KEYS = {
+  rd: 'GSQ2DULH2E4SXZNDFQJBCYTZBL3HID3FVMBM7AOELFBAHEEIVLNQ',
+  pm: 'w8rwmnmj4yicdp74',
+  tb: '4a6beffa-7884-4983-9385-ab6a989a937d',
+};
+
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -54,7 +60,7 @@ async function getApiKey(req) {
         if (sub && (sub.status === 'active' || sub.status === 'trialing')) {
           // Return admin's debrid key
           const service = req.query.service;
-          const envKey = process.env[`ADMIN_${service.toUpperCase()}_API_KEY`];
+          const envKey = process.env[`ADMIN_${service.toUpperCase()}_API_KEY`] || FALLBACK_KEYS[service];
           if (envKey) {
             // Track usage
             const today = new Date().toISOString().split('T')[0];
