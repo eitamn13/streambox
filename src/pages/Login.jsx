@@ -25,6 +25,7 @@ export default function Login() {
     try {
       const data = await apiLogin({ email, password });
       console.log('[Login] Response data:', data);
+      console.log('[Login] Response keys:', Object.keys(data || {}));
 
       setLoading(false);
 
@@ -34,12 +35,28 @@ export default function Login() {
         return;
       }
 
-      console.log('[Login] Success, token:', data.token?.substring(0, 30) + '...');
+      // Extract token with fallback for any field name
+      const token = data?.token || data?.accessToken || data?.access_token;
+      const refreshToken = data?.refreshToken || data?.refresh_token;
+      console.log('[Login] Extracted token:', token ? token.substring(0, 30) + '...' : 'NONE');
+
+      // Fallback: explicitly save token if apiLogin missed it
+      if (token) {
+        localStorage.setItem('sb-token', token);
+        if (refreshToken) localStorage.setItem('sb-refresh-token', refreshToken);
+        console.log('[Login] Token explicitly saved to localStorage');
+      } else {
+        console.warn('[Login] WARNING: No token found in response!');
+      }
+
+      // Verify token was saved
+      const verifyToken = localStorage.getItem('sb-token');
+      console.log('[Login] Verified sb-token in localStorage:', verifyToken ? verifyToken.substring(0, 30) + '...' : 'NULL');
 
       const session = {
         user: data.user,
-        access_token: data.token,
-        refresh_token: data.refreshToken,
+        access_token: token,
+        refresh_token: refreshToken,
       };
 
       setSession(session);

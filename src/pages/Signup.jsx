@@ -30,17 +30,33 @@ export default function Signup() {
     try {
       const data = await apiRegister({ email, password, fullName: name });
       console.log('[Signup] Response:', data);
+      console.log('[Signup] Response keys:', Object.keys(data || {}));
       setLoading(false);
       if (data.error || data.message) {
         console.error('[Signup] Error:', data.message || data.error);
         setError(data.message || data.error || 'Signup failed');
         return;
       }
-      console.log('[Signup] Success, token:', data.token?.substring(0, 30) + '...');
+
+      const token = data?.token || data?.accessToken || data?.access_token;
+      const refreshToken = data?.refreshToken || data?.refresh_token;
+      console.log('[Signup] Extracted token:', token ? token.substring(0, 30) + '...' : 'NONE');
+
+      if (token) {
+        localStorage.setItem('sb-token', token);
+        if (refreshToken) localStorage.setItem('sb-refresh-token', refreshToken);
+        console.log('[Signup] Token explicitly saved to localStorage');
+      } else {
+        console.warn('[Signup] WARNING: No token found in response!');
+      }
+
+      const verifyToken = localStorage.getItem('sb-token');
+      console.log('[Signup] Verified sb-token in localStorage:', verifyToken ? verifyToken.substring(0, 30) + '...' : 'NULL');
+
       const session = {
         user: data.user,
-        access_token: data.token,
-        refresh_token: data.refreshToken,
+        access_token: token,
+        refresh_token: refreshToken,
       };
       setSession(session);
       navigate(redirectTo);

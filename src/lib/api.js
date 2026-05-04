@@ -4,8 +4,8 @@
 const API_URL = (() => {
   const env = import.meta.env?.VITE_API_URL;
   if (env && !env.includes('your_')) return env.replace(/\/$/, '');
-  // Default fallback (same domain — for self-hosted mode)
-  return '';
+  // Fallback to VPS backend IP if env not set
+  return 'https://streambox.one';
 })();
 
 function getToken() {
@@ -50,14 +50,24 @@ async function fetchApi(path, options = {}) {
 }
 
 // Auth
+function extractTokens(data) {
+  const accessToken = data?.token || data?.accessToken || data?.access_token || '';
+  const refreshToken = data?.refreshToken || data?.refresh_token || '';
+  return { accessToken, refreshToken };
+}
+
 export async function apiRegister({ email, password, fullName }) {
   const data = await fetchApi('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password, fullName }),
   });
-  if (data.token) {
-    localStorage.setItem('sb-token', data.token);
-    localStorage.setItem('sb-refresh-token', data.refreshToken);
+  const { accessToken, refreshToken } = extractTokens(data);
+  if (accessToken) {
+    localStorage.setItem('sb-token', accessToken);
+    if (refreshToken) localStorage.setItem('sb-refresh-token', refreshToken);
+    console.log('[apiRegister] Token saved to localStorage');
+  } else {
+    console.warn('[apiRegister] No token found in response. Fields:', Object.keys(data || {}));
   }
   return data;
 }
@@ -67,9 +77,13 @@ export async function apiLogin({ email, password }) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  if (data.token) {
-    localStorage.setItem('sb-token', data.token);
-    localStorage.setItem('sb-refresh-token', data.refreshToken);
+  const { accessToken, refreshToken } = extractTokens(data);
+  if (accessToken) {
+    localStorage.setItem('sb-token', accessToken);
+    if (refreshToken) localStorage.setItem('sb-refresh-token', refreshToken);
+    console.log('[apiLogin] Token saved to localStorage');
+  } else {
+    console.warn('[apiLogin] No token found in response. Fields:', Object.keys(data || {}));
   }
   return data;
 }
@@ -95,9 +109,13 @@ export async function apiRefreshToken() {
     method: 'POST',
     body: JSON.stringify({ refreshToken }),
   });
-  if (data.accessToken) {
-    localStorage.setItem('sb-token', data.accessToken);
-    if (data.refreshToken) localStorage.setItem('sb-refresh-token', data.refreshToken);
+  const { accessToken, refreshToken: newRefreshToken } = extractTokens(data);
+  if (accessToken) {
+    localStorage.setItem('sb-token', accessToken);
+    if (newRefreshToken) localStorage.setItem('sb-refresh-token', newRefreshToken);
+    console.log('[apiRefreshToken] Token saved to localStorage');
+  } else {
+    console.warn('[apiRefreshToken] No token found in response. Fields:', Object.keys(data || {}));
   }
   return data;
 }
