@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useApp } from './AppContext.jsx';
 import {
   fetchSubscription,
   getCustomerKey,
@@ -21,6 +22,7 @@ function getToken() {
 const SubscriptionContext = createContext(null);
 
 export function SubscriptionProvider({ children }) {
+  const { isAdmin } = useApp();
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -96,8 +98,9 @@ export function SubscriptionProvider({ children }) {
   }, []);
 
   const watchCheck = useCallback(() => {
+    if (isAdmin) return { allowed: true };
     return canWatchMovie(subscription);
-  }, [subscription]);
+  }, [subscription, isAdmin]);
 
   const recordWatch = useCallback(() => {
     recordMovieWatch();
@@ -111,8 +114,8 @@ export function SubscriptionProvider({ children }) {
     return filterStreamsByPlan(streams, subscription);
   }, [subscription]);
 
-  const plan = subscription?.plan || 'free';
-  const isPremium = subscription?.is_premium || false;
+  const plan = isAdmin ? 'premium' : (subscription?.plan || 'free');
+  const isPremium = subscription?.is_premium || subscription?.is_admin || isAdmin || false;
   const isTrialing = subscription?.status === 'trialing';
   const planInfo = getPlanInfo(plan);
 

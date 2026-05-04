@@ -12,7 +12,7 @@ import {
 function Detail() {
   const { type, id } = useParams();
   const navigate = useNavigate();
-  const { isPremium, isTrialing, watchCheck } = useSubscription();
+  const { isPremium, isTrialing, watchCheck, subscription } = useSubscription();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [inWatchlist, setInWatchlist] = useState(false);
@@ -100,7 +100,7 @@ function Detail() {
 
   const isTv = type === 'tv';
   const seasons = data.seasons?.filter(s => s.season_number > 0) || [];
-  const hasAccess = isPremium || isTrialing;
+  const hasAccess = isPremium || isTrialing || subscription?.is_admin;
 
   return (
     <div className="page-transition">

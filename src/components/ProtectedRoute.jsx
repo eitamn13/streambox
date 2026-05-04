@@ -4,7 +4,7 @@ import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { Loader2, Crown } from 'lucide-react';
 
 export default function ProtectedRoute({ children, requirePremium = false }) {
-  const { session, loading: authLoading } = useApp();
+  const { session, loading: authLoading, isAdmin } = useApp();
   const { isPremium, loading: subLoading } = useSubscription();
   const location = useLocation();
 
@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children, requirePremium = false }) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  if (requirePremium && !isPremium) {
+  if (requirePremium && !isPremium && !isAdmin) {
     return (
       <div className="min-h-screen bg-sb-black flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
