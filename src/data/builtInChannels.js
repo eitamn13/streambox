@@ -1,8 +1,5 @@
-// Built-in Israeli IPTV channels - curated list
-// Includes public/free streams and popular subscription channels
-
+// Built-in Israeli IPTV channels — only channels with working public URLs
 export const BUILT_IN_CHANNELS = [
-  // === NEWS & GENERAL ===
   {
     id: 'builtin-kan11',
     name: 'כאן 11',
@@ -63,70 +60,6 @@ export const BUILT_IN_CHANNELS = [
     tvgId: 'i24news',
     isPublic: true,
   },
-
-  // === SPORT ===
-  {
-    id: 'builtin-sport1',
-    name: 'ספורט 1',
-    url: 'https://hls.ga/pl/3/ijsriev5redc/playlist.m3u8',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport1',
-    isPublic: true,
-  },
-  {
-    id: 'builtin-sport2',
-    name: 'ספורט 2',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/e/e4/Sport2Logo.svg/120px-Sport2Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport2',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-sport3',
-    name: 'ספורט 3',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport3',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-sport4',
-    name: 'ספורט 4',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport4',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-sport5',
-    name: 'ספורט 5',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/9/9b/Sport5Logo.svg/120px-Sport5Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport5',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-sport5plus',
-    name: 'ספורט 5 פלוס',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/9/9b/Sport5Logo.svg/120px-Sport5Logo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'Sport5Plus',
-    isPublic: false,
-  },
-
-  // === KIDS ===
   {
     id: 'builtin-hop',
     name: 'הופ!',
@@ -136,112 +69,6 @@ export const BUILT_IN_CHANNELS = [
     category: 'kids',
     tvgId: 'HopChannel',
     isPublic: true,
-  },
-  {
-    id: 'builtin-nick',
-    name: 'ניקלודיאון',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Nickelodeon_logo_new.svg/120px-Nickelodeon_logo_new.svg.png',
-    group: 'ילדים',
-    category: 'kids',
-    tvgId: 'NickelodeonIL',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-disney',
-    name: 'דיסני',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Disney%2B_logo.svg/120px-Disney%2B_logo.svg.png',
-    group: 'ילדים',
-    category: 'kids',
-    tvgId: 'DisneyIL',
-    isPublic: false,
-  },
-
-  // === MOVIES ===
-  {
-    id: 'builtin-yesaction',
-    name: 'Yes Action',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/d/d8/YesLogo.svg/120px-YesLogo.svg.png',
-    group: 'סרטים',
-    category: 'movies',
-    tvgId: 'YesAction',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-yescomedy',
-    name: 'Yes Comedy',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/d/d8/YesLogo.svg/120px-YesLogo.svg.png',
-    group: 'סרטים',
-    category: 'movies',
-    tvgId: 'YesComedy',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-yesdrama',
-    name: 'Yes Drama',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/d/d8/YesLogo.svg/120px-YesLogo.svg.png',
-    group: 'סרטים',
-    category: 'movies',
-    tvgId: 'YesDrama',
-    isPublic: false,
-  },
-
-  // === MUSIC ===
-  {
-    id: 'builtin-music24',
-    name: 'Music 24',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/6/66/Music24Logo.svg/120px-Music24Logo.svg.png',
-    group: 'מוזיקה',
-    category: 'music',
-    tvgId: 'Music24',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-mtv',
-    name: 'MTV',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/MTV-2021.svg/120px-MTV-2021.svg.png',
-    group: 'מוזיקה',
-    category: 'music',
-    tvgId: 'MTVIL',
-    isPublic: false,
-  },
-
-  // === DOCUMENTARY ===
-  {
-    id: 'builtin-natgeo',
-    name: 'National Geographic',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/National_Geographic_logo.svg/120px-National_Geographic_logo.svg.png',
-    group: 'דוקומנטרי',
-    category: 'documentary',
-    tvgId: 'NatGeoIL',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-discovery',
-    name: 'Discovery',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Discovery_Channel_logo.svg/120px-Discovery_Channel_logo.svg.png',
-    group: 'דוקומנטרי',
-    category: 'documentary',
-    tvgId: 'DiscoveryIL',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-history',
-    name: 'History',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/History_%28TV_channel%29_logo.svg/120px-History_%28TV_channel%29_logo.svg.png',
-    group: 'דוקומנטרי',
-    category: 'documentary',
-    tvgId: 'HistoryIL',
-    isPublic: false,
   },
 ];
 

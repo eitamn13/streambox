@@ -4,8 +4,6 @@ const PLATFORMS = [
   { id: 'disney', name: 'Disney+', color: '#113ccf', logo: 'D+' },
   { id: 'appletv', name: 'Apple TV', color: '#1d1d1f', logo: 'tv' },
   { id: 'prime', name: 'Prime Video', color: '#00a8e1', logo: 'P' },
-  { id: 'yes', name: 'yes', color: '#0066cc', logo: 'yes' },
-  { id: 'hot', name: 'HOT', color: '#ff6b00', logo: 'HOT' },
 ];
 
 function PlatformRow({ selected, onSelect }) {

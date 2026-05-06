@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Star, Play, Plus } from 'lucide-react';
+import ImageWithFallback from './ImageWithFallback.jsx';
 
 function TopTenRow({ items }) {
   const scrollRef = useRef(null);
@@ -54,7 +55,7 @@ function TopTenRow({ items }) {
                   {/* Poster */}
                   <div className="relative z-10 w-[100px] sm:w-[130px] md:w-[150px] aspect-[2/3] rounded-md overflow-hidden bg-[#1a1a2e] ml-2 transition-transform duration-300 group-hover:scale-105">
                     {item.poster ? (
-                      <img src={item.poster} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+                      <ImageWithFallback src={item.poster} alt={item.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-[#2a2a3e]">
                         <span className="text-3xl font-black text-white/10">{idx + 1}</span>

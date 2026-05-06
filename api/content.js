@@ -9,7 +9,7 @@ const ADMIN_RD_KEY = process.env.ADMIN_RD_API_KEY || 'GSQ2DULH2E4SXZNDFQJBCYTZBL
 const ADMIN_PM_KEY = process.env.ADMIN_PM_API_KEY || 'w8rwmnmj4yicdp74';
 const ADMIN_TB_KEY = process.env.ADMIN_TB_API_KEY || '4a6beffa-7884-4983-9385-ab6a989a937d';
 
-const VPS_API_URL = process.env.VPS_API_URL || 'https://streambox.one';
+const VPS_API_URL = process.env.VPS_API_URL || '';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,9 +76,6 @@ async function isAdminUser(supabase, user) {
 // ------------------------------------------------------------------
 const VPS_URLS = [
   process.env.VPS_API_URL,
-  'https://streambox.one',
-  'http://138.197.176.208',
-  'https://138.197.176.208',
 ].filter(Boolean);
 
 async function checkVpsAuth(token) {

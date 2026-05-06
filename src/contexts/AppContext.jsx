@@ -40,6 +40,16 @@ export function AppProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('sb-tv-settings') || '{"m3uUrl":"","channels":[]}'); } catch { return { m3uUrl: '', channels: [] }; }
   });
 
+  // Onboarding
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return localStorage.getItem('sb-onboarding-done') === 'true'; } catch { return false; }
+  });
+
+  const completeOnboarding = useCallback(() => {
+    localStorage.setItem('sb-onboarding-done', 'true');
+    setOnboardingDone(true);
+  }, []);
+
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Create default profile if none exists
@@ -172,6 +182,8 @@ export function AppProvider({ children }) {
         settings, updateSettings,
         tvSettings, setTvSettings,
         isAdmin,
+        onboardingDone,
+        completeOnboarding,
       }}
     >
       {children}

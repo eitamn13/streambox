@@ -107,17 +107,6 @@ function Player() {
     async function loadStreams() {
       setStreamLoading(true);
       setError(null);
-      setAddProgress('בודק מנוי...');
-
-      const check = watchCheck();
-      if (!check.allowed) {
-        if (!cancelled) {
-          setError(check.reason);
-          setStreamLoading(false);
-        }
-        return;
-      }
-
       setAddProgress('מחפש מקורות...');
       try {
         const results = await fetchStreams(id, type, data.title, data.year, data.imdbId, season || null, episode || null);

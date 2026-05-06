@@ -80,9 +80,9 @@ export default function Subscription() {
                 <Gift className="w-6 h-6 text-sb-purple" />
               </div>
               <div>
-                <h3 className="text-white font-bold text-lg mb-1">7 ימי ניסיון בחינם!</h3>
+                <h3 className="text-white font-bold text-lg mb-1">3 ימי ניסיון בחינם!</h3>
                 <p className="text-sb-light text-sm">
-                  התחל עכשיו וקבל <strong>7 ימי ניסיון ללא תשלום</strong>.
+                  התחל עכשיו וקבל <strong>3 ימי ניסיון ללא תשלום</strong>.
                   ביטול בכל עת — ללא שאלות. לאחר הניסיון: {premiumPlan.price} ₪ / חודש בלבד.
                 </p>
               </div>
@@ -147,7 +147,7 @@ export default function Subscription() {
           </button>
           {!isActive && premiumPlan.stripePriceId && (
             <p className="text-center text-sb-gray text-xs mt-2">
-              7 ימי ניסיון חינם, לאחר מכן {premiumPlan.price} ₪/חודש
+              3 ימי ניסיון חינם, לאחר מכן {premiumPlan.price} ₪/חודש
             </p>
           )}
         </div>

@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { unifiedSearch } from '../core/StreamBoxCore.js';
 import { searchPlugins } from '../core/StreamEngine.js';
 import { Search as SearchIcon, X, Clock, TrendingUp, Film } from 'lucide-react';
+import ImageWithFallback from './ImageWithFallback.jsx';
 
 const RECENT_SEARCHES_KEY = 'sb_recent_searches';
 
@@ -219,7 +220,7 @@ function Search() {
                 >
                   <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-sb-card card-hover">
                     {item.poster ? (
-                      <img src={item.poster} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+                      <ImageWithFallback src={item.poster} alt={item.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-sb-surface">
                         <Film className="w-10 h-10 text-sb-gray" />

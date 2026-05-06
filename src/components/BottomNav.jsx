@@ -1,11 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Search, Tv, Heart, User } from 'lucide-react';
-import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 
 function BottomNav() {
   const location = useLocation();
-  const { isPremium, isTrialing } = useSubscription();
-  const needsSub = !isPremium && !isTrialing;
 
   const tabs = [
     { path: '/', label: 'בית', icon: Home },

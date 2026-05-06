@@ -4,7 +4,7 @@
 const API_URL = (() => {
   const env = import.meta.env?.VITE_API_URL;
   if (env && !env.includes('your_')) return env.replace(/\/$/, '');
-  return 'https://streambox.one';
+  return '';
 })();
 
 function api(path) {
@@ -90,17 +90,9 @@ export async function fetchSubscription(authToken) {
   }
 }
 
-// Gate: admin / premium / active subscription or trial
-export function canWatchMovie(subscription) {
-  const sub = subscription || getStoredSubscription() || { plan: 'free', status: 'none' };
-  // Admin and premium users always have access
-  if (sub.is_admin || sub.is_premium) {
-    return { allowed: true };
-  }
-  const isActive = sub.status === 'active' || sub.status === 'trialing';
-  if (!isActive) {
-    return { allowed: false, reason: 'נדרש מנוי פעיל. התחל ניסיון חינם של 7 ימים.' };
-  }
+// Gate: allow all users to watch content
+// Subscription is used for feature flags only, not content blocking
+export function canWatchMovie(_subscription) {
   return { allowed: true };
 }
 

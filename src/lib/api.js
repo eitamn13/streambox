@@ -4,8 +4,8 @@
 const API_URL = (() => {
   const env = import.meta.env?.VITE_API_URL;
   if (env && !env.includes('your_')) return env.replace(/\/$/, '');
-  // Fallback to VPS backend IP if env not set
-  return 'https://streambox.one';
+  // Use relative paths for same-origin deployment
+  return '';
 })();
 
 function getToken() {

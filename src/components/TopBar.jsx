@@ -40,7 +40,6 @@ function TopBar() {
 
   const navLinks = [
     { path: '/', label: 'בית' },
-    { path: '/discover', label: 'גלה' },
     { path: '/library', label: 'מועדפים' },
     { path: '/live-tv', label: 'טלוויזיה' },
   ];

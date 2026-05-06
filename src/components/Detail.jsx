@@ -6,16 +6,17 @@ import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/Hist
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { useApp } from '../contexts/AppContext.jsx';
 import ContentRow from './ContentRow.jsx';
+import ImageWithFallback from './ImageWithFallback.jsx';
 import {
-  Play, Star, Clock, Calendar, Film, Bookmark, BookmarkCheck,
+  Play, Star, Clock, Film, Bookmark, BookmarkCheck,
   Loader2, ChevronLeft, Users, Globe, Award, ChevronDown,
-  Crown, MonitorOff, Share2, Plus, Check
+  MonitorOff, Share2, Plus, Check
 } from 'lucide-react';
 
 function Detail() {
   const { type, id } = useParams();
   const navigate = useNavigate();
-  const { isPremium, isTrialing, watchCheck } = useSubscription();
+  const { watchCheck } = useSubscription();
   const { addToFavorites, removeFromFavorites, isInFavorites } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -100,11 +101,6 @@ function Detail() {
   };
 
   const handlePlay = (path) => {
-    const check = watchCheck();
-    if (!check.allowed) {
-      navigate('/subscription');
-      return;
-    }
     navigate(path);
   };
 
@@ -141,7 +137,7 @@ function Detail() {
 
   const isTv = type === 'tv';
   const seasons = data.seasons?.filter(s => s.season_number > 0) || [];
-  const hasAccess = isPremium || isTrialing;
+
   const ageRating = (data.id % 3 === 0) ? '16+' : (data.id % 3 === 1) ? '13+' : '18+';
   const quality = data.rating > 7.5 ? '4K HDR' : 'HD';
 
@@ -150,7 +146,7 @@ function Detail() {
       {/* Backdrop - Netflix style */}
       <div className="detail-backdrop">
         {data.backdrop ? (
-          <img src={data.backdrop} alt={data.title} className="w-full h-full object-cover" />
+          <ImageWithFallback src={data.backdrop} alt={data.title} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a]" />
         )}
@@ -163,7 +159,7 @@ function Detail() {
           <div className="shrink-0 w-40 sm:w-48 md:w-56 mx-auto md:mx-0">
             <div className="aspect-[2/3] rounded-xl overflow-hidden bg-[#1a1a2e] shadow-2xl ring-1 ring-white/10">
               {data.poster ? (
-                <img src={data.poster} alt={data.title} className="w-full h-full object-cover" />
+                <ImageWithFallback src={data.poster} alt={data.title} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Film className="w-12 h-12 text-[#808090]" />
@@ -207,25 +203,6 @@ function Detail() {
                 </span>
               ))}
             </div>
-
-            {/* Subscription notice */}
-            {!hasAccess && (
-              <div className="bg-[#564d6d]/20 border border-[#564d6d]/30 rounded-xl p-4 mb-6">
-                <div className="flex items-start gap-3">
-                  <Crown className="w-5 h-5 text-[#564d6d] shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-white text-sm font-medium mb-1">נדרש מנוי פרימיום</p>
-                    <p className="text-[#808090] text-xs mb-2">צפה בסרטים וסדרות באיכות 4K עם כתוביות אוטומטיות. התחל ניסיון חינם ל-3 ימים!</p>
-                    <button
-                      onClick={() => navigate('/subscription')}
-                      className="bg-[#ffd700] hover:bg-[#ffe135] text-[#0f0f1a] text-xs font-bold px-4 py-2 rounded-lg transition-colors"
-                    >
-                      התחל ניסיון חינם
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Source check */}
             {sourceCheck.checking && (

@@ -8,7 +8,6 @@ import {
   Play,
   CalendarDays,
   Clock,
-  ExternalLink,
   Star,
   Filter,
   Tv,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.jsx';
 import LiveTVPlayer from './LiveTVPlayer.jsx';
+import ImageWithFallback from './ImageWithFallback.jsx';
 import { fetchM3U, getCategories, detectCategory } from '../utils/m3uParser.js';
 import { fetchEPG, getChannelEPG, formatEPGTime, getCurrentProgram } from '../utils/epgParser.js';
 import { getBuiltInChannels } from '../data/builtInChannels.js';
@@ -45,8 +45,7 @@ const CATEGORY_ICONS = {
 
 const IPTV_SOURCES = [
   { id: 'builtin', name: 'ערוצים מובנים', placeholder: '' },
-  { id: 'tvteam', name: 'tv.team', placeholder: 'https://tv.team/playlist.m3u?token=...' },
-  { id: 'custom', name: 'כתובת מותאמת', placeholder: 'https://example.com/playlist.m3u8' },
+  { id: 'custom', name: 'כתובת מותאמת אישית', placeholder: 'https://example.com/playlist.m3u8' },
 ];
 
 function LiveTV() {
@@ -228,20 +227,7 @@ function LiveTV() {
               {selectedSource !== 'builtin' && (
                 <>
                   <p className="text-xs text-sb-gray mb-3">
-                    {selectedSource === 'tvteam' ? (
-                      <>הדבק כאן את כתובת רשימת ה-M3U שלך מ{' '}
-                        <a
-                          href="https://tv.team/packages"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sb-red hover:underline inline-flex items-center gap-1"
-                        >
-                          tv.team <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </>
-                    ) : (
-                      'הדבק כתובת M3U מותאמת אישית'
-                    )}
+  {'הדבק כתובת M3U מותאמת אישית'}
                   </p>
 
                   <input
@@ -305,14 +291,12 @@ function LiveTV() {
 
             <div className="flex items-center justify-between mt-3 px-1">
               <div className="flex items-center gap-3">
-                {selectedChannel.logo && (
-                  <img
-                    src={selectedChannel.logo}
-                    alt=""
-                    className="w-10 h-10 object-contain rounded-lg bg-sb-black"
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                )}
+                <ImageWithFallback
+                  src={selectedChannel.logo}
+                  alt={selectedChannel.name}
+                  type="logo"
+                  className="w-10 h-10 object-contain rounded-lg bg-[#0f0f1a]"
+                />
                 <div>
                   <p className="text-white font-medium text-sm">{selectedChannel.name}</p>
                   <ChannelNowPlaying epgData={epgData} channel={selectedChannel} compact />
@@ -500,28 +484,16 @@ function ChannelCard({ channel, isSelected, isFavorite, epgData, onClick, onTogg
         <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
       )}
 
-      <div className="relative shrink-0">
-        {channel.logo ? (
-          <img
-            src={channel.logo}
-            alt={channel.name}
-            className="w-14 h-14 object-contain rounded-lg bg-sb-black p-1"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'flex';
-            }}
-          />
-        ) : null}
-        <div
-          className={`w-14 h-14 rounded-lg bg-sb-surface flex items-center justify-center text-lg ${
-            channel.logo ? 'hidden' : 'flex'
-          }`}
-        >
-          {CATEGORY_ICONS[channel.category] || '📺'}
-        </div>
+      <div className="relative shrink-0 w-14 h-14">
+        <ImageWithFallback
+          src={channel.logo}
+          alt={channel.name}
+          type="logo"
+          className="w-14 h-14 object-contain rounded-lg bg-[#0f0f1a] p-1"
+        />
         {!hasUrl && (
-          <div className="absolute inset-0 bg-sb-black/60 rounded-lg flex items-center justify-center">
-            <WifiOff className="w-5 h-5 text-sb-gray" />
+          <div className="absolute inset-0 bg-[#0f0f1a]/60 rounded-lg flex items-center justify-center z-10">
+            <WifiOff className="w-5 h-5 text-[#808090]" />
           </div>
         )}
       </div>

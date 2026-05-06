@@ -156,22 +156,14 @@ export default function LiveTVScreen() {
               </div>
 
               <p className="text-xs text-nexora-400 mb-3">
-                Paste your M3U playlist URL from{' '}
-                <a
-                  href="https://tv.team/packages"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline inline-flex items-center gap-1"
-                >
-                  tv.team <ExternalLink className="w-3 h-3" />
-                </a>
+                הדבק כאן את כתובת רשימת הערוצים שלך (M3U)
               </p>
 
               <input
                 type="url"
                 value={m3uUrl}
                 onChange={(e) => setM3uUrl(e.target.value)}
-                placeholder="https://tv.team/playlist.m3u?token=..."
+                placeholder="https://example.com/playlist.m3u"
                 className="w-full bg-nexora-950 border border-nexora-700 rounded-xl px-4 py-3 text-sm text-white placeholder-nexora-500 focus:outline-none focus:border-accent-500 mb-3"
               />
 
@@ -447,7 +439,7 @@ export default function LiveTVScreen() {
               No Channels Loaded
             </h2>
             <p className="text-sm text-nexora-400 max-w-xs mb-6">
-              Add your M3U playlist URL from tv.team to start watching live TV.
+              הוסף כתובת M3U כדי לצפות בטלוויזיה חיה.
             </p>
             <button
               onClick={() => setShowUrlInput(true)}
@@ -456,15 +448,7 @@ export default function LiveTVScreen() {
               <LinkIcon className="w-4 h-4" />
               Add Playlist URL
             </button>
-            <a
-              href="https://tv.team/packages"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 text-xs text-accent-400 hover:underline flex items-center gap-1"
-            >
-              Get playlist from tv.team
-              <ExternalLink className="w-3 h-3" />
-            </a>
+
           </motion.div>
         )}
       </div>

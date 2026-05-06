@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getContinueWatching, getRecentlyWatched, getWatchlist, removeFromWatchlist, clearHistory } from '../core/History.js';
 import { Play, Trash2, Clock, Bookmark, Film, History } from 'lucide-react';
+import ImageWithFallback from './ImageWithFallback.jsx';
 
 function Library() {
   const [activeTab, setActiveTab] = useState('continue');
@@ -51,7 +52,7 @@ function Library() {
             <Link to={`/detail/${item.type}/${item.id}`} className="block">
               <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-sb-card card-hover">
                 {item.poster ? (
-                  <img src={item.poster} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+                  <ImageWithFallback src={item.poster} alt={item.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-sb-surface">
                     <Film className="w-10 h-10 text-sb-gray" />

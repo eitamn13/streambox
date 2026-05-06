@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import { Loader2, Crown } from 'lucide-react';
 
-export default function ProtectedRoute({ children, requirePremium = false }) {
+export default function ProtectedRoute({ children, requirePremium = false, requireAdmin = false }) {
   const { session, loading: authLoading, isAdmin } = useApp();
   const { isPremium, loading: subLoading } = useSubscription();
   const location = useLocation();
@@ -20,6 +20,10 @@ export default function ProtectedRoute({ children, requirePremium = false }) {
 
   if (!session) {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />;
   }
 
   if (requirePremium && !isPremium && !isAdmin) {
