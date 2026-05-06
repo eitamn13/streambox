@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import { apiLogin } from '../lib/api.js';
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, Tv } from 'lucide-react';
+import { Phone, Lock, Eye, EyeOff, ArrowLeft, Tv, Check } from 'lucide-react';
 import { getCatalog } from '../core/StreamBoxCore.js';
 
-// Sample backdrop images for login background grid
 const SAMPLE_BACKDROPS = [
   'https://image.tmdb.org/t/p/w300/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg',
   'https://image.tmdb.org/t/p/w300/2Nti3gYAX513wvhp8IiLL6ZDyOm.jpg',
@@ -27,15 +26,15 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
 
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [bgImages, setBgImages] = useState([]);
 
   useEffect(() => {
-    // Load some trending images for background
     async function loadBg() {
       try {
         const trending = await getCatalog('trending', 1);
@@ -56,12 +55,15 @@ export default function Login() {
     setError('');
     setLoading(true);
 
+    // Support both phone and email for now (backend compatibility)
+    const identifier = phone.includes('@') ? phone : phone.replace(/[^0-9]/g, '');
+
     try {
-      const data = await apiLogin({ email, password });
+      const data = await apiLogin({ email: identifier, password });
       setLoading(false);
 
       if (data.error || data.message) {
-        setError(data.message || data.error || 'Invalid login credentials');
+        setError(data.message || data.error || 'פרטי התחברות שגויים');
         return;
       }
 
@@ -82,37 +84,28 @@ export default function Login() {
       setSession(session);
       navigate(redirectTo);
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'התחברות נכשלה');
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    // Google OAuth placeholder - would integrate with actual OAuth flow
     setError('התחברות עם Google בקרוב');
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-4 py-12 overflow-hidden bg-[#0a0a0f]">
+    <div className="min-h-screen relative flex items-center justify-center px-4 py-12 overflow-hidden bg-[#0f0f1a]">
       {/* Background movie grid */}
       <div className="login-bg-grid">
         {(bgImages.length > 0 ? bgImages : SAMPLE_BACKDROPS).map((src, i) => (
           <div key={i} className="relative overflow-hidden rounded">
-            <img
-              src={src}
-              alt=""
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
+            <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
         ))}
       </div>
 
       {/* Dark overlay */}
-      <div className="fixed inset-0 bg-[#0a0a0f]/80 z-[1]" />
+      <div className="fixed inset-0 bg-[#0f0f1a]/85 z-[1]" />
 
       {/* Content */}
       <div className="relative z-10 w-full max-w-md animate-fade-in">
@@ -124,15 +117,15 @@ export default function Login() {
           <h1 className="text-3xl font-black text-white tracking-tight">
             Stream<span className="text-[#e50914]">Box</span>
           </h1>
-          <p className="text-[#a0a0a0] text-sm mt-1">צפייה חכמה</p>
+          <p className="text-[#808090] text-sm mt-1">התחברות לחשבון שלך</p>
         </div>
 
         {/* Modal card */}
-        <div className="bg-[#1a1a2e]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
           {/* Google login button */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-gray-100 text-black rounded-xl font-bold text-sm transition-all mb-6"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-gray-100 text-black rounded-lg font-bold text-sm transition-all mb-6"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -149,64 +142,79 @@ export default function Login() {
               <div className="w-full border-t border-white/10" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-3 bg-[#1a1a2e] text-[#a0a0a0]">או</span>
+              <span className="px-3 bg-[#1a1a2e] text-[#808090]">או</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
               </div>
             )}
 
+            {/* Phone number input */}
             <div>
-              <label className="block text-xs font-medium text-[#a0a0a0] mb-2">דוא"ל</label>
+              <label className="block text-xs font-medium text-[#808090] mb-2">מספר טלפון</label>
               <div className="relative">
-                <Mail className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-[#8b8b9a]" />
+                <Phone className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-[#808090]" />
                 <input
-                  type="email"
+                  type="tel"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder-[#8b8b9a] outline-none focus:border-[#e50914]/60 transition-all"
-                  placeholder="you@example.com"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-[#0f0f1a] border border-white/10 rounded-lg pr-10 pl-4 py-3 text-sm text-white placeholder-[#808090] outline-none focus:border-[#e50914]/60 transition-all"
+                  placeholder="050-123-4567"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#a0a0a0] mb-2">סיסמה</label>
+              <label className="block text-xs font-medium text-[#808090] mb-2">סיסמה</label>
               <div className="relative">
-                <Lock className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-[#8b8b9a]" />
+                <Lock className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-[#808090]" />
                 <input
                   type={showPass ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl pr-10 pl-10 py-3 text-sm text-white placeholder-[#8b8b9a] outline-none focus:border-[#e50914]/60 transition-all"
+                  className="w-full bg-[#0f0f1a] border border-white/10 rounded-lg pr-10 pl-10 py-3 text-sm text-white placeholder-[#808090] outline-none focus:border-[#e50914]/60 transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass((s) => !s)}
-                  className="absolute top-1/2 -translate-y-1/2 left-3 text-[#8b8b9a] hover:text-white transition-colors"
+                  className="absolute top-1/2 -translate-y-1/2 left-3 text-[#808090] hover:text-white transition-colors"
                 >
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
+            {/* Remember me */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberMe ? 'bg-[#e50914] border-[#e50914]' : 'border-white/30'}`}>
+                  {rememberMe && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="hidden" />
+                <span className="text-xs text-[#808090]">זכור אותי</span>
+              </label>
+              <Link to="/reset-password" className="text-xs text-[#e50914] hover:text-[#f40612] transition-colors">
+                איפוס סיסמה
+              </Link>
+            </div>
+
             {/* reCAPTCHA placeholder */}
             <div className="flex justify-center py-2">
-              <div className="bg-[#0a0a0f] border border-white/10 rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="bg-[#0f0f1a] border border-white/10 rounded-lg px-4 py-3 flex items-center gap-3">
                 <div className="w-6 h-6 border-2 border-white/20 rounded-sm" />
-                <span className="text-sm text-[#a0a0a0]">אני לא רובוט</span>
-                <div className="flex flex-col items-center ml-2">
+                <span className="text-sm text-[#808090]">אני לא רובוט</span>
+                <div className="flex flex-col items-center mr-2">
                   <svg className="w-8 h-8" viewBox="0 0 48 48">
                     <path fill="#4285F4" d="M24 4C12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20S35.05 4 24 4zm0 36c-8.82 0-16-7.18-16-16S15.18 8 24 8s16 7.18 16 16-7.18 16-16 16z" />
                   </svg>
-                  <span className="text-[8px] text-[#8b8b9a]">reCAPTCHA</span>
+                  <span className="text-[8px] text-[#808090]">reCAPTCHA</span>
                 </div>
               </div>
             </div>
@@ -215,24 +223,19 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 btn-gold rounded-xl font-bold text-sm disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 btn-gold rounded-lg font-bold text-sm disabled:opacity-60"
             >
-              <span>{loading ? 'טוען...' : 'התחבר'}</span>
+              <span>{loading ? 'טוען...' : 'התחברות'}</span>
               <ArrowLeft className="w-4 h-4" />
             </button>
           </form>
         </div>
 
         <div className="text-center mt-6 space-y-2">
-          <p className="text-[#a0a0a0] text-sm">
-            <Link to="/reset-password" className="text-white hover:text-[#f5c518] transition-colors">
-              שכחת סיסמה?
-            </Link>
-          </p>
-          <p className="text-[#a0a0a0] text-sm">
-            אין לך חשבון?{' '}
-            <Link to={`/signup${redirectTo !== '/' ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`} className="text-[#e50914] hover:text-[#c00710] font-semibold transition-colors">
-              הירשם
+          <p className="text-[#808090] text-sm">
+            האם אתה חדש כאן?{' '}
+            <Link to={`/signup${redirectTo !== '/' ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`} className="text-[#e50914] hover:text-[#f40612] font-semibold transition-colors">
+              הרשמה
             </Link>
           </p>
         </div>

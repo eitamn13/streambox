@@ -27,16 +27,14 @@ function HeroBanner({ items }) {
   if (!items || items.length === 0) return null;
 
   const item = items[index];
-
-  // Simulated metadata
   const ageRating = item.id % 3 === 0 ? '16+' : item.id % 3 === 1 ? '13+' : '18+';
-  const quality = item.rating > 7.5 ? '4K HDR' : item.rating > 6 ? 'HD' : 'HD';
+  const quality = item.rating > 7.5 ? '4K HDR' : 'HD';
   const matchScore = Math.min(98, 85 + (item.id % 15));
 
   return (
     <div
       className="relative w-full overflow-hidden"
-      style={{ height: 'clamp(400px, 70vh, 800px)' }}
+      style={{ height: 'clamp(400px, 65vh, 750px)' }}
       onMouseEnter={() => setShowTrailer(true)}
       onMouseLeave={() => { setShowTrailer(false); setIsMuted(true); }}
     >
@@ -54,38 +52,33 @@ function HeroBanner({ items }) {
                   alt={it.title}
                   className={`w-full h-full object-cover transition-transform duration-[10000ms] ease-out ${i === index ? 'scale-105' : 'scale-100'}`}
                 />
-                {/* Simulated trailer overlay on hover */}
                 {showTrailer && i === index && (
-                  <div className="absolute inset-0 bg-black/30 animate-fade-in" />
+                  <div className="absolute inset-0 bg-black/20 animate-fade-in" />
                 )}
               </>
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#181818] to-[#1f1f1f]" />
+              <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a]" />
             )}
-            {/* Dark vignette */}
             <div className="absolute inset-0 hero-vignette" />
-            {/* Bottom gradient - strong Netflix style */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
-            {/* Left gradient for text */}
-            <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#141414]/30 to-[#141414]/70" />
-            {/* Top gradient for nav */}
-            <div className="absolute inset-0 bg-gradient-to-b from-[#141414]/70 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a] via-[#0f0f1a]/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#0f0f1a]/30 to-[#0f0f1a]/70" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f1a]/70 via-transparent to-transparent" />
           </div>
         ))}
       </div>
 
       {/* Content */}
       <div className="absolute inset-0 flex items-end">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full pb-20 sm:pb-28">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 w-full pb-20 sm:pb-28">
           <div className="max-w-2xl animate-fade-up">
-            {/* Match score + meta */}
+            {/* Match + meta */}
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <span className="match-badge">{matchScore}% התאמה</span>
-              <span className="text-[#b3b3b3] text-sm">{item.year}</span>
+              <span className="text-[#b3b3c0] text-sm">{item.year}</span>
               <span className="age-badge">{ageRating}</span>
               <span className="quality-badge">{quality}</span>
               {item.runtime && (
-                <span className="text-[#b3b3b3] text-sm flex items-center gap-1">
+                <span className="text-[#b3b3c0] text-sm flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" />
                   {item.runtime} דק'
                 </span>
@@ -96,9 +89,8 @@ function HeroBanner({ items }) {
               {item.title}
             </h1>
 
-            {/* Cast line */}
-            <p className="text-[#b3b3b3] text-sm mb-3">
-              כוכבים: {['ליאור אשכנזי', 'שלמה בראבא', 'רונית אלקבץ', 'מוני מושונוב'].slice(0, 3).join(', ')}
+            <p className="text-[#b3b3c0] text-sm mb-3">
+              כוכבים: ליאור אשכנזי, שלמה בראבא, רונית אלקבץ
             </p>
 
             <p className="text-white/90 text-sm sm:text-base lg:text-lg leading-relaxed mb-8 line-clamp-3 drop-shadow-lg max-w-xl">
@@ -120,7 +112,6 @@ function HeroBanner({ items }) {
                 <Info className="w-5 h-5" />
                 מידע נוסף
               </Link>
-              {/* Mute toggle (simulated trailer) */}
               {showTrailer && (
                 <button
                   onClick={() => setIsMuted(!isMuted)}

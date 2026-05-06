@@ -7,7 +7,6 @@ import { getCatalog, getMoviesByGenre, GENRES } from '../core/StreamBoxCore.js';
 import { getContinueWatching, getRecentlyWatched } from '../core/History.js';
 import { useApp } from '../contexts/AppContext.jsx';
 
-// Time-based greeting
 function getGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return 'בוקר טוב';
@@ -96,7 +95,7 @@ function Home() {
   }, [globalContinue]);
 
   return (
-    <div className="page-transition bg-[#141414]">
+    <div className="page-transition bg-[#0f0f1a]">
       {/* Greeting */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-4 pb-2">
         <h1 className="text-xl sm:text-2xl font-bold text-white">
@@ -104,24 +103,24 @@ function Home() {
         </h1>
       </div>
 
-      {/* 1. HERO BANNER */}
+      {/* HERO BANNER */}
       <HeroBanner items={catalogs.trending.slice(0, 5)} />
 
-      {/* 2. CONTINUE WATCHING */}
+      {/* CONTINUE WATCHING */}
       {continueWatchingItems.length > 0 && (
         <ContentRow title="המשך צפייה" items={continueWatchingItems} showProgress />
       )}
 
-      {/* 3. PLATFORM ROWS */}
+      {/* PLATFORM FILTERS */}
       <PlatformRow selected={selectedPlatform} onSelect={setSelectedPlatform} />
 
-      {/* 4. TOP 10 */}
+      {/* TOP 10 */}
       <TopTenRow items={filterByPlatform(catalogs.trending)} />
 
-      {/* 5. CATEGORY ROWS */}
+      {/* CATEGORY ROWS */}
       <div className="pb-12">
         <ContentRow title="המומלצים עבורך" items={filterByPlatform(catalogs.trending)} loading={loading} />
-        <ContentRow title="חדש על StreamBox" items={filterByPlatform(new2025.length > 0 ? new2025 : catalogs.movies_upcoming || catalogs.movies_popular)} loading={loading} />
+        <ContentRow title="חדש על StreamBox" items={filterByPlatform(new2025.length > 0 ? new2025 : catalogs.movies_popular)} loading={loading} />
         <ContentRow title="פופולרי עכשיו" items={filterByPlatform(catalogs.movies_popular)} loading={loading} />
         <ContentRow title="NETFLIX" items={filterByPlatform(catalogs.movies_top_rated)} loading={loading} />
         <ContentRow title="HBO" items={filterByPlatform(catalogs.tv_top_rated)} loading={loading} />

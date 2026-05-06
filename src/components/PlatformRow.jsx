@@ -12,7 +12,7 @@ function PlatformRow({ selected, onSelect }) {
   return (
     <section className="py-4 animate-fade-up">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
-        <div className="platform-row hide-scrollbar">
+        <div className="flex gap-3 overflow-x-auto hide-scrollbar py-2">
           {PLATFORMS.map((platform) => {
             const isActive = selected === platform.id;
             return (
@@ -21,16 +21,13 @@ function PlatformRow({ selected, onSelect }) {
                 onClick={() => onSelect(isActive ? null : platform.id)}
                 className={`relative flex-shrink-0 flex items-center gap-2.5 px-5 py-2.5 rounded-full border transition-all duration-300 ${
                   isActive
-                    ? 'bg-white text-black border-white font-bold shadow-lg'
-                    : 'bg-[#1f1f1f]/80 text-white border-white/10 hover:border-white/30 hover:bg-[#2a2a2a]'
+                    ? 'bg-[#e50914] text-white border-[#e50914] font-bold shadow-lg shadow-[#e50914]/20'
+                    : 'bg-[#1a1a2e]/80 text-white border-white/10 hover:border-white/30 hover:bg-[#2a2a3e]'
                 }`}
               >
                 <span
                   className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black"
-                  style={{
-                    background: isActive ? '#000' : platform.color,
-                    color: '#fff',
-                  }}
+                  style={{ background: isActive ? 'rgba(0,0,0,0.3)' : platform.color, color: '#fff' }}
                 >
                   {platform.logo}
                 </span>

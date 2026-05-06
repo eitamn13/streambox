@@ -11,6 +11,13 @@ const STORAGE_KEYS = {
   torbox: 'sb_debrid_tb',
 };
 
+// Built-in API keys for instant streaming
+const BUILTIN_KEYS = {
+  realdebrid: 'F2QPFG4LWD5HXBBVKZRFM6EACCSJPBTX3XZKPKENXL5KF7C3WNBA',
+  premiumize: '7ugfcux5ixfaik9m',
+  torbox: '6be78ab9-8d2e-484e-b00f-e9daf309f715',
+};
+
 class DebridService {
   constructor(name, keyStorage, serviceCode) {
     this.name = name;
@@ -20,10 +27,11 @@ class DebridService {
 
   getApiKey() {
     try {
-      return JSON.parse(localStorage.getItem(this.keyStorage))?.apiKey || '';
-    } catch {
-      return '';
-    }
+      const saved = JSON.parse(localStorage.getItem(this.keyStorage))?.apiKey;
+      if (saved) return saved;
+    } catch { /* no saved key */ }
+    // Return built-in key as fallback
+    return BUILTIN_KEYS[this.serviceCode] || '';
   }
 
   setApiKey(apiKey) {
@@ -37,7 +45,8 @@ class DebridService {
   isConfigured() {
     // In SaaS mode, customer key replaces individual debrid keys
     if (getCustomerKey()) return true;
-    return !!this.getApiKey();
+    // Always configured with built-in keys
+    return true;
   }
 
   // Generic proxy request

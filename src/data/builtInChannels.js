@@ -1,5 +1,5 @@
 // Built-in Israeli IPTV channels - curated list
-// Includes public/free streams and popular subscription channels (marked)
+// Includes public/free streams and popular subscription channels
 
 export const BUILT_IN_CHANNELS = [
   // === NEWS & GENERAL ===
@@ -68,12 +68,12 @@ export const BUILT_IN_CHANNELS = [
   {
     id: 'builtin-sport1',
     name: 'ספורט 1',
-    url: '',
+    url: 'https://hls.ga/pl/3/ijsriev5redc/playlist.m3u8',
     logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
     group: 'ספורט',
     category: 'sport',
     tvgId: 'Sport1',
-    isPublic: false,
+    isPublic: true,
   },
   {
     id: 'builtin-sport2',
@@ -83,6 +83,26 @@ export const BUILT_IN_CHANNELS = [
     group: 'ספורט',
     category: 'sport',
     tvgId: 'Sport2',
+    isPublic: false,
+  },
+  {
+    id: 'builtin-sport3',
+    name: 'ספורט 3',
+    url: '',
+    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
+    group: 'ספורט',
+    category: 'sport',
+    tvgId: 'Sport3',
+    isPublic: false,
+  },
+  {
+    id: 'builtin-sport4',
+    name: 'ספורט 4',
+    url: '',
+    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/5/53/Sport1Logo.svg/120px-Sport1Logo.svg.png',
+    group: 'ספורט',
+    category: 'sport',
+    tvgId: 'Sport4',
     isPublic: false,
   },
   {
@@ -103,16 +123,6 @@ export const BUILT_IN_CHANNELS = [
     group: 'ספורט',
     category: 'sport',
     tvgId: 'Sport5Plus',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-oneg',
-    name: 'ONE גלילות',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/he/thumb/a/a8/OneLogo.svg/120px-OneLogo.svg.png',
-    group: 'ספורט',
-    category: 'sport',
-    tvgId: 'OneG',
     isPublic: false,
   },
 
@@ -231,16 +241,6 @@ export const BUILT_IN_CHANNELS = [
     group: 'דוקומנטרי',
     category: 'documentary',
     tvgId: 'HistoryIL',
-    isPublic: false,
-  },
-  {
-    id: 'builtin-animal',
-    name: 'Animal Planet',
-    url: '',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Animal_Planet_logo.svg/120px-Animal_Planet_logo.svg.png',
-    group: 'דוקומנטרי',
-    category: 'documentary',
-    tvgId: 'AnimalPlanetIL',
     isPublic: false,
   },
 ];

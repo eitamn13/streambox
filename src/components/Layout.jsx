@@ -9,7 +9,7 @@ function Layout() {
   if (isPlayer) return <Outlet />;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0f]">
+    <div className="flex flex-col min-h-screen bg-[#0f0f1a]">
       <TopBar />
       <main className="flex-1 pt-16 pb-20 md:pb-0 page-transition">
         <Outlet />

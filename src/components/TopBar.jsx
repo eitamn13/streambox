@@ -41,7 +41,7 @@ function TopBar() {
   const navLinks = [
     { path: '/', label: 'בית' },
     { path: '/discover', label: 'גלה' },
-    { path: '/library', label: 'ספרייה' },
+    { path: '/library', label: 'מועדפים' },
     { path: '/live-tv', label: 'טלוויזיה' },
   ];
 
@@ -49,11 +49,11 @@ function TopBar() {
     <header
       className={`fixed top-0 right-0 left-0 z-50 transition-all duration-500 ${
         scrolled || searchOpen
-          ? 'bg-[#0a0a0f]/95 backdrop-blur-2xl border-b border-white/5'
-          : 'bg-gradient-to-b from-[#0a0a0f]/80 to-transparent'
+          ? 'bg-[#0f0f1a]/95 backdrop-blur-2xl border-b border-white/5'
+          : 'bg-gradient-to-b from-[#0f0f1a]/80 to-transparent'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
           <div className="w-9 h-9 bg-[#e50914] rounded-lg flex items-center justify-center shadow-lg transition-shadow">
@@ -63,7 +63,7 @@ function TopBar() {
             Stream<span className="text-[#e50914]">Box</span>
           </span>
           {(isTrialing || isPremium) && (
-            <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${isTrialing ? 'bg-[#3b82f6]/20 text-[#3b82f6]' : 'bg-[#8b5cf6]/20 text-[#8b5cf6]'}`}>
+            <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${isTrialing ? 'bg-[#0071eb]/20 text-[#0071eb]' : 'bg-[#564d6d]/30 text-[#b3b3c0]'}`}>
               {isTrialing ? 'ניסיון' : <><Crown className="w-3 h-3" /> פרימיום</>}
             </span>
           )}
@@ -78,7 +78,7 @@ function TopBar() {
               className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 location.pathname === link.path
                   ? 'text-white'
-                  : 'text-[#a0a0a0] hover:text-white'
+                  : 'text-[#808090] hover:text-white'
               }`}
             >
               {location.pathname === link.path && (
@@ -94,17 +94,17 @@ function TopBar() {
           {searchOpen ? (
             <form onSubmit={handleSearch} className="flex items-center gap-2 animate-fade-in">
               <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b8b9a]" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#808090]" />
                 <input
                   ref={inputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="חפש סרט, סדרה, שחקן..."
-                  className="w-48 sm:w-80 bg-[#1a1a2e] border border-white/10 rounded-lg pr-9 pl-3 py-2.5 text-sm text-white placeholder-[#8b8b9a] focus:outline-none focus:border-[#e50914]/60 transition-all"
+                  className="w-48 sm:w-80 bg-[#1a1a2e] border border-white/10 rounded-lg pr-9 pl-3 py-2.5 text-sm text-white placeholder-[#808090] focus:outline-none focus:border-[#e50914]/60 transition-all"
                 />
               </div>
-              <button type="button" onClick={() => setSearchOpen(false)} className="p-2 text-[#8b8b9a] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
+              <button type="button" onClick={() => setSearchOpen(false)} className="p-2 text-[#808090] hover:text-white rounded-lg hover:bg-white/5 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </form>

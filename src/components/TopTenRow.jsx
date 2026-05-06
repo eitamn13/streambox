@@ -22,16 +22,10 @@ function TopTenRow({ items }) {
         <h2 className="row-title mb-1 px-1">טופ 10 בישראל</h2>
 
         <div className="relative row-container group">
-          <button
-            onClick={() => scroll('right')}
-            className="row-nav-btn right hidden md:flex"
-          >
+          <button onClick={() => scroll('right')} className="row-nav-btn right hidden md:flex">
             <ChevronRight className="w-10 h-10" />
           </button>
-          <button
-            onClick={() => scroll('left')}
-            className="row-nav-btn left hidden md:flex"
-          >
+          <button onClick={() => scroll('left')} className="row-nav-btn left hidden md:flex">
             <ChevronLeft className="w-10 h-10" />
           </button>
 
@@ -49,7 +43,7 @@ function TopTenRow({ items }) {
                       className="text-[120px] sm:text-[160px] md:text-[200px] font-black leading-[0.8]"
                       style={{
                         color: 'transparent',
-                        WebkitTextStroke: '3px rgba(255,255,255,0.15)',
+                        WebkitTextStroke: '3px rgba(100,150,255,0.2)',
                         fontFamily: "'Inter', system-ui, sans-serif",
                       }}
                     >
@@ -58,24 +52,17 @@ function TopTenRow({ items }) {
                   </div>
 
                   {/* Poster */}
-                  <div className="relative z-10 w-[100px] sm:w-[130px] md:w-[150px] aspect-[2/3] rounded-md overflow-hidden bg-[#1f1f1f] ml-2 transition-transform duration-300 group-hover:scale-105">
+                  <div className="relative z-10 w-[100px] sm:w-[130px] md:w-[150px] aspect-[2/3] rounded-md overflow-hidden bg-[#1a1a2e] ml-2 transition-transform duration-300 group-hover:scale-105">
                     {item.poster ? (
-                      <img
-                        src={item.poster}
-                        alt={item.title}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={item.poster} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-[#2a2a2a]">
+                      <div className="w-full h-full flex items-center justify-center bg-[#2a2a3e]">
                         <span className="text-3xl font-black text-white/10">{idx + 1}</span>
                       </div>
                     )}
 
-                    {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
 
-                    {/* Hover controls */}
                     <div className="absolute inset-0 flex flex-col justify-end p-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center">
@@ -87,7 +74,6 @@ function TopTenRow({ items }) {
                       </div>
                     </div>
 
-                    {/* Rating */}
                     {item.rating > 0 && (
                       <div className="absolute top-1.5 left-1.5 imdb-badge z-10">
                         <Star className="w-2 h-2" fill="black" />
@@ -97,7 +83,6 @@ function TopTenRow({ items }) {
                   </div>
                 </div>
 
-                {/* Hebrew title below */}
                 <h3 className="mt-2 text-sm font-medium text-white group-hover:text-[#e5e5e5] transition-colors line-clamp-1 px-1">
                   {item.title}
                 </h3>
