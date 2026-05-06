@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getContentDetails, getSeasonDetails } from '../core/StreamBoxCore.js';
+import { fetchStreams } from '../core/StreamEngine.js';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../core/History.js';
 import { useSubscription } from '../contexts/SubscriptionContext.jsx';
 import {
   Play, Star, Clock, Calendar, Film, Bookmark, BookmarkCheck,
   Loader2, ChevronLeft, Users, Globe, Award, ChevronDown,
-  Crown
+  Crown, MonitorOff
 } from 'lucide-react';
 
 function Detail() {
@@ -17,6 +18,7 @@ function Detail() {
   const [loading, setLoading] = useState(true);
   const [inWatchlist, setInWatchlist] = useState(false);
   const [showAllCast, setShowAllCast] = useState(false);
+  const [sourceCheck, setSourceCheck] = useState({ checking: false, hasSources: true, count: 0 });
 
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [seasonData, setSeasonData] = useState(null);
@@ -33,6 +35,17 @@ function Detail() {
           setInWatchlist(isInWatchlist(id, type));
           const firstRealSeason = details.seasons?.find(s => s.season_number > 0);
           if (firstRealSeason) setSelectedSeason(firstRealSeason.season_number);
+
+          // Check sources availability
+          setSourceCheck({ checking: true, hasSources: true, count: 0 });
+          try {
+            const streams = await fetchStreams(id, type, details.title, details.year, details.imdbId, null, null);
+            if (!cancelled) {
+              setSourceCheck({ checking: false, hasSources: streams.length > 0, count: streams.length });
+            }
+          } catch (e) {
+            if (!cancelled) setSourceCheck({ checking: false, hasSources: false, count: 0 });
+          }
         }
       } catch (_err) {
         console.error('Failed to load details:', _err);
@@ -190,11 +203,33 @@ function Detail() {
               </div>
             )}
 
+            {/* Source availability warning */}
+            {sourceCheck.checking && (
+              <div className="flex items-center gap-2 text-sb-gray text-sm mb-4">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                בודק זמינות מקורות...
+              </div>
+            )}
+            {!sourceCheck.checking && !sourceCheck.hasSources && (
+              <div className="bg-sb-gray/10 border border-sb-gray/20 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <MonitorOff className="w-5 h-5 text-sb-gray shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white text-sm font-medium mb-1">אין מקורות זמינים כרגע</p>
+                    <p className="text-sb-gray text-xs">
+                      לא נמצאו מקורות לצפייה בתוכן זה. המקורות עשויים להתעדכן בהמשך.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-3 mb-8">
               {!isTv ? (
                 <button
                   onClick={() => handlePlay(`/player/movie/${id}`)}
-                  className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
+                  disabled={!sourceCheck.hasSources}
+                  className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
                 >
                   <Play className="w-5 h-5" />
                   צפה עכשיו
@@ -203,7 +238,8 @@ function Detail() {
                 seasons.length > 0 && (
                   <button
                     onClick={() => handlePlay(`/player/tv/${id}/${seasons[0].season_number}/1`)}
-                    className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
+                    disabled={!sourceCheck.hasSources}
+                    className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-sb-red-glow hover:shadow-xl hover:shadow-sb-red-glow"
                   >
                     <Play className="w-5 h-5" />
                     נגן פרק 1

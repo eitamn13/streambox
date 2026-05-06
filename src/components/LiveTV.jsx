@@ -12,34 +12,47 @@ import {
   Star,
   Filter,
   Tv,
-  ChevronDown,
+  Radio,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.jsx';
 import LiveTVPlayer from './LiveTVPlayer.jsx';
-import { fetchM3U, getCategories } from '../utils/m3uParser.js';
-import { fetchEPG, getChannelEPG, formatEPGTime } from '../utils/epgParser.js';
+import { fetchM3U, getCategories, detectCategory } from '../utils/m3uParser.js';
+import { fetchEPG, getChannelEPG, formatEPGTime, getCurrentProgram } from '../utils/epgParser.js';
+import { getBuiltInChannels } from '../data/builtInChannels.js';
 
 const CATEGORY_LABELS = {
   all: 'הכל',
   sport: 'ספורט',
   news: 'חדשות',
   movies: 'סרטים',
+  kids: 'ילדים',
+  music: 'מוזיקה',
+  entertainment: 'בידור',
+  documentary: 'דוקומנטרי',
 };
 
 const CATEGORY_ICONS = {
   sport: '⚽',
   news: '📰',
   movies: '🎬',
+  kids: '🧸',
+  music: '🎵',
+  entertainment: '🎭',
+  documentary: '🌍',
 };
 
 const IPTV_SOURCES = [
+  { id: 'builtin', name: 'ערוצים מובנים', placeholder: '' },
   { id: 'tvteam', name: 'tv.team', placeholder: 'https://tv.team/playlist.m3u?token=...' },
+  { id: 'custom', name: 'כתובת מותאמת', placeholder: 'https://example.com/playlist.m3u8' },
 ];
 
 function LiveTV() {
   const { tvSettings, setTvSettings } = useApp();
   const [showUrlInput, setShowUrlInput] = useState(false);
-  const [selectedSource, setSelectedSource] = useState(tvSettings?.source || 'tvteam');
+  const [selectedSource, setSelectedSource] = useState(tvSettings?.source || 'builtin');
   const [m3uUrl, setM3uUrl] = useState(tvSettings?.m3uUrl || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -59,6 +72,14 @@ function LiveTV() {
 
   const channels = tvSettings?.channels || [];
   const categories = useMemo(() => getCategories(channels), [channels]);
+
+  // Load built-in channels on first mount if no channels loaded
+  useEffect(() => {
+    if (!tvSettings?.channels || tvSettings.channels.length === 0) {
+      const builtIn = getBuiltInChannels();
+      setTvSettings({ source: 'builtin', m3uUrl: '', channels: builtIn });
+    }
+  }, []);
 
   // Load EPG on mount
   useEffect(() => {
@@ -88,13 +109,25 @@ function LiveTV() {
       result = result.filter(
         (c) =>
           c.name.toLowerCase().includes(q) ||
-          c.group.toLowerCase().includes(q)
+          (c.group || '').toLowerCase().includes(q)
       );
     }
+    // Sort favorites first
+    result = result.sort((a, b) => {
+      const aFav = favorites.includes(a.id) ? 1 : 0;
+      const bFav = favorites.includes(b.id) ? 1 : 0;
+      return bFav - aFav;
+    });
     return result;
-  }, [channels, activeCategory, searchQuery]);
+  }, [channels, activeCategory, searchQuery, favorites]);
 
   const handleSaveUrl = useCallback(async () => {
+    if (selectedSource === 'builtin') {
+      const builtIn = getBuiltInChannels();
+      setTvSettings({ source: 'builtin', m3uUrl: '', channels: builtIn });
+      setShowUrlInput(false);
+      return;
+    }
     if (!m3uUrl.trim()) return;
     setIsLoading(true);
     setError(null);
@@ -122,123 +155,137 @@ function LiveTV() {
   const currentSource = IPTV_SOURCES.find((s) => s.id === selectedSource) || IPTV_SOURCES[0];
 
   return (
-    <div className="page-transition px-4 py-6 max-w-5xl mx-auto">
+    <div className="page-transition px-4 py-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <div className="flex items-center gap-2 flex-1">
-          <Tv className="w-6 h-6 text-sb-red" />
-          <h1 className="text-2xl font-bold text-white">טלוויזיה חיה</h1>
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-10 h-10 rounded-xl bg-sb-red/20 flex items-center justify-center">
+            <Tv className="w-5 h-5 text-sb-red" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">טלוויזיה חיה</h1>
+            <p className="text-xs text-sb-gray">{channels.length} ערוצים זמינים • ערוצים ישראליים</p>
+          </div>
         </div>
         <button
-          onClick={() => setShowUrlInput(true)}
-          className="p-2.5 rounded-xl bg-sb-card border border-sb-border text-sb-gray hover:text-white hover:border-sb-gray transition-colors"
-          title="הגדר URL של רשימת M3U"
+          onClick={() => setShowUrlInput(!showUrlInput)}
+          className={`p-2.5 rounded-xl border transition-colors ${
+            showUrlInput
+              ? 'bg-sb-red text-white border-sb-red'
+              : 'bg-sb-card border-sb-border text-sb-gray hover:text-white hover:border-sb-gray'
+          }`}
+          title="הגדר מקור ערוצים"
         >
-          <LinkIcon className="w-4 h-4" />
+          {showUrlInput ? <X className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
         </button>
       </div>
 
-      {/* URL Input */}
+      {/* Source Config Panel */}
       <AnimatePresence>
         {showUrlInput && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-sb-card rounded-2xl p-5 border border-sb-border mb-6"
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            className="overflow-hidden"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-sb-gray uppercase tracking-wider">
-                הגדרות מקור IPTV
-              </h2>
+            <div className="bg-sb-card rounded-2xl p-5 border border-sb-border mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-sb-light">
+                  הגדרות מקור
+                </h2>
+                <button
+                  onClick={() => setShowUrlInput(false)}
+                  className="text-sb-gray hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Source selector */}
+              <div className="mb-4">
+                <label className="text-xs text-sb-gray mb-2 block">בחר ספק</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {IPTV_SOURCES.map((source) => (
+                    <button
+                      key={source.id}
+                      onClick={() => {
+                        setSelectedSource(source.id);
+                        if (source.id === 'builtin') setM3uUrl('');
+                      }}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                        selectedSource === source.id
+                          ? 'bg-sb-red text-white'
+                          : 'bg-sb-surface text-sb-gray hover:text-white'
+                      }`}
+                    >
+                      {source.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedSource !== 'builtin' && (
+                <>
+                  <p className="text-xs text-sb-gray mb-3">
+                    {selectedSource === 'tvteam' ? (
+                      <>הדבק כאן את כתובת רשימת ה-M3U שלך מ{' '}
+                        <a
+                          href="https://tv.team/packages"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sb-red hover:underline inline-flex items-center gap-1"
+                        >
+                          tv.team <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </>
+                    ) : (
+                      'הדבק כתובת M3U מותאמת אישית'
+                    )}
+                  </p>
+
+                  <input
+                    type="url"
+                    value={m3uUrl}
+                    onChange={(e) => setM3uUrl(e.target.value)}
+                    placeholder={currentSource.placeholder}
+                    className="w-full bg-sb-black border border-sb-border rounded-xl px-4 py-3 text-sm text-white placeholder-sb-gray focus:outline-none focus:border-sb-red/60 mb-3"
+                  />
+                </>
+              )}
+
+              {selectedSource === 'builtin' && (
+                <p className="text-xs text-sb-gray mb-3">
+                  ערוצים ישראליים מובנים — כולל כאן 11, קשת 12, רשת 13, עכשיו 14, ועוד.
+                  הערוצים הספורטים והפרימיום דורשים מקור IPTV משלך.
+                </p>
+              )}
+
+              {error && (
+                <p className="text-xs text-red-400 mb-3">{error}</p>
+              )}
+
               <button
-                onClick={() => setShowUrlInput(false)}
-                className="text-sb-gray hover:text-white transition-colors"
+                onClick={handleSaveUrl}
+                disabled={isLoading || (selectedSource !== 'builtin' && !m3uUrl.trim())}
+                className="w-full bg-sb-red hover:bg-sb-red-hover disabled:opacity-50 text-white font-medium text-sm py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
-                <X className="w-4 h-4" />
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    טוען ערוצים...
+                  </>
+                ) : (
+                  <>
+                    <Radio className="w-4 h-4" />
+                    {selectedSource === 'builtin' ? 'טען ערוצים מובנים' : 'טען ערוצים'}
+                  </>
+                )}
               </button>
             </div>
-
-            {/* Source selector */}
-            <div className="mb-4">
-              <label className="text-xs text-sb-gray mb-2 block">בחר ספק IPTV</label>
-              <div className="flex gap-2">
-                {IPTV_SOURCES.map((source) => (
-                  <button
-                    key={source.id}
-                    onClick={() => {
-                      setSelectedSource(source.id);
-                      setM3uUrl('');
-                    }}
-                    className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      selectedSource === source.id
-                        ? 'bg-sb-red text-white'
-                        : 'bg-sb-surface text-sb-gray hover:text-white'
-                    }`}
-                  >
-                    {source.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <p className="text-xs text-sb-gray mb-3">
-              הדבק כאן את כתובת רשימת ה-M3U שלך מ{' '}
-              <a
-                href="https://tv.team/packages"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sb-red hover:underline inline-flex items-center gap-1"
-              >
-                tv.team <ExternalLink className="w-3 h-3" />
-              </a>
-            </p>
-
-            <input
-              type="url"
-              value={m3uUrl}
-              onChange={(e) => setM3uUrl(e.target.value)}
-              placeholder={currentSource.placeholder}
-              className="w-full bg-sb-black border border-sb-border rounded-xl px-4 py-3 text-sm text-white placeholder-sb-gray focus:outline-none focus:border-sb-red/60 mb-3"
-            />
-
-            {error && (
-              <p className="text-xs text-red-400 mb-3">{error}</p>
-            )}
-
-            <button
-              onClick={handleSaveUrl}
-              disabled={isLoading || !m3uUrl.trim()}
-              className="w-full bg-sb-red hover:bg-sb-red-hover disabled:opacity-50 text-white font-medium text-sm py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  טוען ערוצים...
-                </>
-              ) : (
-                'טען ערוצים'
-              )}
-            </button>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Israeli filter badge */}
-      {channels.length > 0 && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sb-red/10 border border-sb-red/30 text-sb-red text-xs font-medium">
-            🇮🇱 ערוצים ישראליים בלבד
-          </span>
-          <span className="text-xs text-sb-gray">{channels.length} ערוצים נמצאו</span>
-          {epgLoading && (
-            <span className="text-xs text-sb-gray flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              טוען EPG...
-            </span>
-          )}
-        </div>
-      )}
 
       {/* Player */}
       <AnimatePresence>
@@ -268,9 +315,7 @@ function LiveTV() {
                 )}
                 <div>
                   <p className="text-white font-medium text-sm">{selectedChannel.name}</p>
-                  <p className="text-xs text-sb-gray capitalize">
-                    {CATEGORY_LABELS[selectedChannel.category] || selectedChannel.category}
-                  </p>
+                  <ChannelNowPlaying epgData={epgData} channel={selectedChannel} compact />
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -372,58 +417,29 @@ function LiveTV() {
 
           <p className="text-xs text-sb-gray mb-3">
             {filteredChannels.length} מתוך {channels.length} ערוצים
+            {epgLoading && (
+              <span className="mr-2 inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                טוען לוח שידורים...
+              </span>
+            )}
           </p>
 
           {/* Channel Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredChannels.map((channel) => (
-              <motion.button
+              <ChannelCard
                 key={channel.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                whileTap={{ scale: 0.98 }}
+                channel={channel}
+                isSelected={selectedChannel?.id === channel.id}
+                isFavorite={favorites.includes(channel.id)}
+                epgData={epgData}
                 onClick={() => {
                   setSelectedChannel(channel);
                   setShowEpg(false);
                 }}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors text-right ${
-                  selectedChannel?.id === channel.id
-                    ? 'bg-sb-red/10 border-sb-red/40'
-                    : 'bg-sb-card border-sb-border hover:border-sb-gray/50'
-                }`}
-              >
-                <div className="relative shrink-0">
-                  {channel.logo ? (
-                    <img
-                      src={channel.logo}
-                      alt={channel.name}
-                      className="w-14 h-14 object-contain rounded-lg bg-sb-black"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'flex';
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={`w-14 h-14 rounded-lg bg-sb-surface flex items-center justify-center text-lg ${
-                      channel.logo ? 'hidden' : 'flex'
-                    }`}
-                  >
-                    {CATEGORY_ICONS[channel.category] || '📺'}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{channel.name}</p>
-                  <p className="text-xs text-sb-gray">{channel.group}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {favorites.includes(channel.id) && (
-                    <Star className="w-3.5 h-3.5 text-sb-red fill-sb-red" />
-                  )}
-                  <Play className="w-4 h-4 text-sb-gray" />
-                </div>
-              </motion.button>
+                onToggleFavorite={() => toggleFavorite(channel.id)}
+              />
             ))}
           </div>
         </>
@@ -441,14 +457,14 @@ function LiveTV() {
           </div>
           <h2 className="text-lg font-semibold text-white mb-2">אין ערוצים טעונים</h2>
           <p className="text-sm text-sb-gray max-w-xs mb-6">
-            הוסף כתובת M3U מ-tv.team או Shalva IPTV כדי להתחיל לצפות בטלוויזיה חיה.
+            בחר מקור ערוצים — ערוצים מובנים או הוסף כתובת M3U משלך.
           </p>
           <button
             onClick={() => setShowUrlInput(true)}
             className="flex items-center gap-2 bg-sb-red hover:bg-sb-red-hover text-white font-medium text-sm py-3 px-6 rounded-xl transition-colors"
           >
-            <LinkIcon className="w-4 h-4" />
-            הוסף כתובת רשימה
+            <Radio className="w-4 h-4" />
+            בחר מקור
           </button>
         </motion.div>
       )}
@@ -456,6 +472,131 @@ function LiveTV() {
   );
 }
 
+/* ============================================
+   Channel Card Component
+   ============================================ */
+function ChannelCard({ channel, isSelected, isFavorite, epgData, onClick, onToggleFavorite }) {
+  const currentProgram = useMemo(() => {
+    return getCurrentProgram(epgData, channel.tvgId, channel.name);
+  }, [epgData, channel]);
+
+  const hasUrl = !!channel.url;
+
+  return (
+    <motion.button
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors text-right relative overflow-hidden ${
+        isSelected
+          ? 'bg-sb-red/10 border-sb-red/40'
+          : 'bg-sb-card border-sb-border hover:border-sb-gray/50'
+      }`}
+    >
+      {/* Live indicator */}
+      {hasUrl && (
+        <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+      )}
+
+      <div className="relative shrink-0">
+        {channel.logo ? (
+          <img
+            src={channel.logo}
+            alt={channel.name}
+            className="w-14 h-14 object-contain rounded-lg bg-sb-black p-1"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }}
+          />
+        ) : null}
+        <div
+          className={`w-14 h-14 rounded-lg bg-sb-surface flex items-center justify-center text-lg ${
+            channel.logo ? 'hidden' : 'flex'
+          }`}
+        >
+          {CATEGORY_ICONS[channel.category] || '📺'}
+        </div>
+        {!hasUrl && (
+          <div className="absolute inset-0 bg-sb-black/60 rounded-lg flex items-center justify-center">
+            <WifiOff className="w-5 h-5 text-sb-gray" />
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0 text-right">
+        <p className="text-white text-sm font-medium truncate">{channel.name}</p>
+        <p className="text-[11px] text-sb-gray truncate">
+          {currentProgram ? (
+            <span className="flex items-center gap-1 justify-end">
+              <span className="w-1.5 h-1.5 rounded-full bg-sb-red animate-pulse" />
+              {currentProgram.title}
+            </span>
+          ) : (
+            channel.group
+          )}
+        </p>
+        {channel.isPublic && (
+          <span className="inline-block mt-1 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+            חינם
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center gap-1 shrink-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          className={`p-1.5 rounded-lg transition-colors ${
+            isFavorite
+              ? 'text-sb-red'
+              : 'text-sb-gray hover:text-white'
+          }`}
+        >
+          <Star className="w-3.5 h-3.5" fill={isFavorite ? 'currentColor' : 'none'} />
+        </button>
+        {hasUrl ? (
+          <Play className="w-4 h-4 text-sb-gray" />
+        ) : (
+          <span className="text-[9px] text-sb-gray bg-sb-surface px-1.5 py-0.5 rounded">
+            מנוי
+          </span>
+        )}
+      </div>
+    </motion.button>
+  );
+}
+
+/* ============================================
+   Now Playing (compact) Component
+   ============================================ */
+function ChannelNowPlaying({ epgData, channel, compact }) {
+  const program = useMemo(() => {
+    return getCurrentProgram(epgData, channel.tvgId, channel.name);
+  }, [epgData, channel]);
+
+  if (!program) return <p className="text-xs text-sb-gray">אין מידע על תוכנית נוכחית</p>;
+
+  if (compact) {
+    return (
+      <p className="text-xs text-sb-gray flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-sb-red animate-pulse" />
+        {program.title}
+        <span className="text-sb-gray/60">
+          {formatEPGTime(program.start)}–{formatEPGTime(program.stop)}
+        </span>
+      </p>
+    );
+  }
+}
+
+/* ============================================
+   EPG Display Component
+   ============================================ */
 function EPGDisplay({ channel, epgData }) {
   const programs = useMemo(() => {
     return getChannelEPG(epgData, channel.tvgId, channel.name);

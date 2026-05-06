@@ -63,14 +63,16 @@ function parseExtInf(line) {
 }
 
 const CATEGORY_MAP = {
-  sport: ['sport', 'sports', 'espn', 'fox sports', 'bein', 'sky sport', 'bt sport', 'nba', 'nfl', 'ufc', 'mma', 'boxing', 'motorsport', 'racing', 'golf', 'tennis', 'cricket', 'ספורט', 'כדורגל', 'כדורסל', 'sport1', 'sport2', 'sport3', 'sport4', 'sport5'],
-  news: ['news', 'cnn', 'bbc', 'fox news', 'msnbc', 'al jazeera', 'sky news', 'bloomberg', 'cnbc', 'reuters', 'חדשות'],
-  movies: ['movie', 'movies', 'cinema', 'film', 'hbo', 'showtime', 'starz', 'cinemax', 'epix', 'tcm', 'amc', 'fx', 'syfy', 'sci-fi', 'סרטים'],
-  kids: ['kids', 'children', 'cartoon', 'disney', 'nickelodeon', 'nick', 'cartoon network', 'boomerang', 'pbs kids', 'baby', 'junior', 'ילדים', 'ניק', 'דיסני', 'הופ'],
-  music: ['music', 'mtv', 'vh1', 'bet', 'trace', 'mcm', 'fm', 'radio', 'מוזיקה'],
+  sport: ['sport', 'sports', 'espn', 'fox sports', 'bein', 'sky sport', 'bt sport', 'nba', 'nfl', 'ufc', 'mma', 'boxing', 'motorsport', 'racing', 'golf', 'tennis', 'cricket', 'ספורט', 'כדורגל', 'כדורסל', 'sport1', 'sport2', 'sport3', 'sport4', 'sport5', 'one גלילות', 'oneg', 'yes sport'],
+  news: ['news', 'cnn', 'bbc', 'fox news', 'msnbc', 'al jazeera', 'sky news', 'bloomberg', 'cnbc', 'reuters', 'חדשות', 'חדשות 10', 'חדשות 12', 'חדשות 13', 'כאן', 'קשת', 'רשת', 'עכשיו 14', 'i24', 'מכאן'],
+  movies: ['movie', 'movies', 'cinema', 'film', 'hbo', 'showtime', 'starz', 'cinemax', 'epix', 'tcm', 'amc', 'fx', 'syfy', 'sci-fi', 'סרטים', 'yes action', 'yes comedy', 'yes drama', 'yes movies', 'סרט'],
+  kids: ['kids', 'children', 'cartoon', 'disney', 'nickelodeon', 'nick', 'cartoon network', 'boomerang', 'pbs kids', 'baby', 'junior', 'ילדים', 'ניק', 'דיסני', 'הופ', 'hop'],
+  music: ['music', 'mtv', 'vh1', 'bet', 'trace', 'mcm', 'fm', 'radio', 'מוזיקה', 'music 24'],
+  entertainment: ['entertainment', 'e!', 'food network', 'hgtv', 'travel', 'lifestyle', 'fashion', 'style', 'בידור', 'ערוץ הבידור', 'bip'],
+  documentary: ['documentary', 'discovery', 'nat geo', 'national geographic', 'history', 'animal planet', 'science', 'bbc earth', 'smithsonian', 'דוקו', 'דוקומנטרי'],
 };
 
-function detectCategory(channel) {
+export function detectCategory(channel) {
   const text = `${channel.name} ${channel.group}`.toLowerCase();
 
   for (const [category, keywords] of Object.entries(CATEGORY_MAP)) {

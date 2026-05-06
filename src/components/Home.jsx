@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import HeroBanner from './HeroBanner.jsx';
 import ContentRow from './ContentRow.jsx';
+import PlatformRow from './PlatformRow.jsx';
+import TopTenRow from './TopTenRow.jsx';
 import { getCatalog, getMoviesByGenre, GENRES } from '../core/StreamBoxCore.js';
 import { getContinueWatching, getRecentlyWatched } from '../core/History.js';
 
 function Home() {
+  const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [catalogs, setCatalogs] = useState({
     trending: [],
     movies_popular: [],
@@ -55,27 +58,82 @@ function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  // Filter items by selected platform (simulated)
+  const filterByPlatform = (items) => {
+    if (!selectedPlatform || !items) return items;
+    // In a real app, items would have a platform property
+    // Here we deterministically filter based on item id
+    const platformIndex = ['netflix', 'hbo', 'disney', 'appletv', 'prime', 'yes', 'hot'].indexOf(selectedPlatform);
+    if (platformIndex === -1) return items;
+    return items.filter((item) => (item.id || 0) % 7 === platformIndex);
+  };
+
+  const allMovies = useMemo(() => {
+    const all = [
+      ...catalogs.movies_popular,
+      ...catalogs.movies_top_rated,
+      ...genres.drama,
+    ];
+    // Remove duplicates
+    const seen = new Set();
+    return all.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [catalogs, genres]);
+
+  const new2025 = useMemo(() => {
+    return allMovies.filter((item) => item.year === '2025' || item.year === '2026');
+  }, [allMovies]);
+
   return (
-    <div className="page-transition">
+    <div className="page-transition bg-[#0a0a0f]">
+      {/* 1. HERO BANNER */}
       <HeroBanner items={catalogs.trending.slice(0, 5)} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-16 relative z-10">
+
+      {/* 2. PLATFORM ROWS */}
+      <div className="relative z-10 bg-[#0a0a0f]">
+        <PlatformRow selected={selectedPlatform} onSelect={setSelectedPlatform} />
+      </div>
+
+      {/* 3. TOP 10 ROW */}
+      <TopTenRow items={filterByPlatform(catalogs.trending)} />
+
+      {/* 4. CATEGORY ROWS */}
+      <div className="relative z-10 bg-[#0a0a0f] pb-8">
         {continueWatching.length > 0 && (
-          <ContentRow title="המשך לצפות" items={continueWatching} />
+          <ContentRow title="המשך לצפות" items={filterByPlatform(continueWatching)} />
         )}
-        <ContentRow title="טרנדינג" items={catalogs.trending} loading={loading} />
 
-        {/* Genre rows */}
-        <ContentRow title={`🎬 ${GENRES.action.name}`} items={genres.action} loading={loading} />
-        <ContentRow title={`😂 ${GENRES.comedy.name}`} items={genres.comedy} loading={loading} />
-        <ContentRow title={`🎭 ${GENRES.drama.name}`} items={genres.drama} loading={loading} />
-        <ContentRow title={`🔥 ${GENRES.thriller.name}`} items={genres.thriller} loading={loading} />
+        <ContentRow title="טרנדינג 🔥" items={filterByPlatform(catalogs.trending)} loading={loading} />
 
-        <ContentRow title="סרטים פופולריים" items={catalogs.movies_popular} loading={loading} />
-        <ContentRow title="סדרות פופולריות" items={catalogs.tv_popular} loading={loading} />
-        <ContentRow title="סרטים מדורגים" items={catalogs.movies_top_rated} loading={loading} />
-        <ContentRow title="סדרות מדורגות" items={catalogs.tv_top_rated} loading={loading} />
+        {/* Category: Heavy Drama */}
+        <ContentRow title="דרמה כבדה" items={filterByPlatform(genres.drama)} loading={loading} />
+
+        {/* Category: Netflix style */}
+        <ContentRow title="NETFLIX" items={filterByPlatform(catalogs.movies_popular)} loading={loading} />
+
+        {/* Category: HBO style */}
+        <ContentRow title="HBO" items={filterByPlatform(catalogs.tv_top_rated)} loading={loading} />
+
+        {/* Category: 2025 New */}
+        {new2025.length > 0 && (
+          <ContentRow title="2025 חדש" items={filterByPlatform(new2025)} loading={loading} />
+        )}
+
+        {/* Category: Dubbed (simulated with comedy) */}
+        <ContentRow title="מדובב" items={filterByPlatform(genres.comedy)} loading={loading} />
+
+        <ContentRow title="אקשן" items={filterByPlatform(genres.action)} loading={loading} />
+        <ContentRow title="מתח" items={filterByPlatform(genres.thriller)} loading={loading} />
+        <ContentRow title="סרטים פופולריים" items={filterByPlatform(catalogs.movies_popular)} loading={loading} />
+        <ContentRow title="סדרות פופולריות" items={filterByPlatform(catalogs.tv_popular)} loading={loading} />
+        <ContentRow title="סרטים מדורגים" items={filterByPlatform(catalogs.movies_top_rated)} loading={loading} />
+        <ContentRow title="סדרות מדורגות" items={filterByPlatform(catalogs.tv_top_rated)} loading={loading} />
+
         {recentlyWatched.length > 0 && (
-          <ContentRow title="נצפו לאחרונה" items={recentlyWatched} />
+          <ContentRow title="נצפו לאחרונה" items={filterByPlatform(recentlyWatched)} />
         )}
       </div>
     </div>
