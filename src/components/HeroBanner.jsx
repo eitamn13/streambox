@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Info, ChevronRight, ChevronLeft, Star, Clock } from 'lucide-react';
+import { Play, Info, ChevronRight, ChevronLeft, Star, Clock, Volume2, VolumeX } from 'lucide-react';
 
 function HeroBanner({ items }) {
   const [index, setIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [showTrailer, setShowTrailer] = useState(false);
 
   const goTo = useCallback((i) => {
     if (transitioning) return;
     setTransitioning(true);
+    setShowTrailer(false);
     setIndex(i);
     setTimeout(() => setTransitioning(false), 700);
   }, [transitioning]);
@@ -17,7 +20,7 @@ function HeroBanner({ items }) {
     if (!items || items.length <= 1) return;
     const interval = setInterval(() => {
       goTo((index + 1) % items.length);
-    }, 8000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [items, index, goTo]);
 
@@ -25,9 +28,19 @@ function HeroBanner({ items }) {
 
   const item = items[index];
 
+  // Simulated metadata
+  const ageRating = item.id % 3 === 0 ? '16+' : item.id % 3 === 1 ? '13+' : '18+';
+  const quality = item.rating > 7.5 ? '4K HDR' : item.rating > 6 ? 'HD' : 'HD';
+  const matchScore = Math.min(98, 85 + (item.id % 15));
+
   return (
-    <div className="relative w-full h-[65vh] sm:h-[75vh] lg:h-[85vh] overflow-hidden">
-      {/* Background with Ken Burns effect */}
+    <div
+      className="relative w-full overflow-hidden"
+      style={{ height: 'clamp(400px, 70vh, 800px)' }}
+      onMouseEnter={() => setShowTrailer(true)}
+      onMouseLeave={() => { setShowTrailer(false); setIsMuted(true); }}
+    >
+      {/* Background */}
       <div className="absolute inset-0">
         {items.map((it, i) => (
           <div
@@ -35,75 +48,87 @@ function HeroBanner({ items }) {
             className={`absolute inset-0 transition-opacity duration-1000 ${i === index ? 'opacity-100' : 'opacity-0'}`}
           >
             {it.backdrop ? (
-              <img
-                src={it.backdrop}
-                alt={it.title}
-                className={`w-full h-full object-cover transition-transform duration-[8000ms] ease-out ${i === index ? 'scale-105' : 'scale-100'}`}
-              />
+              <>
+                <img
+                  src={it.backdrop}
+                  alt={it.title}
+                  className={`w-full h-full object-cover transition-transform duration-[10000ms] ease-out ${i === index ? 'scale-105' : 'scale-100'}`}
+                />
+                {/* Simulated trailer overlay on hover */}
+                {showTrailer && i === index && (
+                  <div className="absolute inset-0 bg-black/30 animate-fade-in" />
+                )}
+              </>
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#12121a] to-[#1a1a2e]" />
+              <div className="w-full h-full bg-gradient-to-br from-[#181818] to-[#1f1f1f]" />
             )}
-            {/* Dark cinematic vignette */}
+            {/* Dark vignette */}
             <div className="absolute inset-0 hero-vignette" />
-            {/* Dark bottom gradient - stronger */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/70 to-[#0a0a0f]/30" />
-            {/* Dark side gradient for text readability */}
-            <div className="absolute inset-0 bg-gradient-to-l from-[#0a0a0f]/70 via-[#0a0a0f]/30 to-[#0a0a0f]/50" />
-            {/* Top dark gradient for nav readability */}
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f]/60 via-transparent to-transparent" />
+            {/* Bottom gradient - strong Netflix style */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
+            {/* Left gradient for text */}
+            <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#141414]/30 to-[#141414]/70" />
+            {/* Top gradient for nav */}
+            <div className="absolute inset-0 bg-gradient-to-b from-[#141414]/70 via-transparent to-transparent" />
           </div>
         ))}
       </div>
 
       {/* Content */}
       <div className="absolute inset-0 flex items-end">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full pb-16 sm:pb-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full pb-20 sm:pb-28">
           <div className="max-w-2xl animate-fade-up">
-            {/* Meta info */}
-            <div className="flex items-center gap-3 mb-4 flex-wrap">
-              {item.rating > 0 && (
-                <span className="flex items-center gap-1 text-[#f5c518] text-sm font-bold">
-                  <Star className="w-4 h-4" fill="currentColor" />
-                  {item.rating.toFixed(1)}
-                </span>
-              )}
-              {item.year && (
-                <span className="text-[#a0a0a0] text-sm">{item.year}</span>
-              )}
+            {/* Match score + meta */}
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <span className="match-badge">{matchScore}% התאמה</span>
+              <span className="text-[#b3b3b3] text-sm">{item.year}</span>
+              <span className="age-badge">{ageRating}</span>
+              <span className="quality-badge">{quality}</span>
               {item.runtime && (
-                <span className="flex items-center gap-1 text-[#a0a0a0] text-sm">
+                <span className="text-[#b3b3b3] text-sm flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" />
                   {item.runtime} דק'
                 </span>
               )}
-              <span className="text-[#a0a0a0] text-sm">
-                {item.type === 'tv' ? 'סדרה' : 'סרט'}
-              </span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white mb-4 leading-tight drop-shadow-2xl">
               {item.title}
             </h1>
 
-            <p className="text-white/80 text-sm sm:text-base lg:text-lg leading-relaxed mb-8 line-clamp-3 drop-shadow-lg max-w-xl">
+            {/* Cast line */}
+            <p className="text-[#b3b3b3] text-sm mb-3">
+              כוכבים: {['ליאור אשכנזי', 'שלמה בראבא', 'רונית אלקבץ', 'מוני מושונוב'].slice(0, 3).join(', ')}
+            </p>
+
+            <p className="text-white/90 text-sm sm:text-base lg:text-lg leading-relaxed mb-8 line-clamp-3 drop-shadow-lg max-w-xl">
               {item.overview}
             </p>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <Link
                 to={`/player/${item.type}/${item.id}`}
-                className="flex items-center gap-2.5 bg-[#e50914] hover:bg-[#c00710] text-white px-8 py-3 rounded-lg font-bold text-base transition-all shadow-lg shadow-[#e50914]/20 hover:shadow-xl hover:shadow-[#e50914]/30 hover:-translate-y-0.5 active:translate-y-0"
+                className="flex items-center gap-2.5 bg-white hover:bg-white/90 text-black px-8 py-3 rounded-md font-bold text-base transition-all hover:scale-105"
               >
-                <Play className="w-5 h-5" fill="white" />
+                <Play className="w-5 h-5" fill="black" />
                 צפה עכשיו
               </Link>
               <Link
                 to={`/detail/${item.type}/${item.id}`}
-                className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-lg font-bold text-base backdrop-blur-sm transition-all hover:-translate-y-0.5 active:translate-y-0 border border-white/10"
+                className="flex items-center gap-2.5 bg-[#6d6d6d]/70 hover:bg-[#6d6d6d]/90 text-white px-8 py-3 rounded-md font-bold text-base backdrop-blur-sm transition-all hover:scale-105"
               >
                 <Info className="w-5 h-5" />
-                פרטים
+                מידע נוסף
               </Link>
+              {/* Mute toggle (simulated trailer) */}
+              {showTrailer && (
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="w-10 h-10 rounded-full border border-white/40 flex items-center justify-center text-white hover:bg-white/10 transition-all"
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -111,7 +136,7 @@ function HeroBanner({ items }) {
 
       {/* Progress dots */}
       {items.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2">
           {items.map((_, i) => (
             <button
               key={i}

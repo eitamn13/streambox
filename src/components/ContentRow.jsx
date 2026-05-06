@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Star, ChevronLeft, ChevronRight, Clock, Film } from 'lucide-react';
+import { Play, Star, ChevronLeft, ChevronRight, Plus, Check, Volume2, VolumeX } from 'lucide-react';
 
 const PLATFORM_STYLES = {
   netflix: { bg: '#e50914', text: '#fff', label: 'N' },
@@ -18,24 +18,37 @@ function getPlatformStyle(item) {
   return PLATFORM_STYLES[platforms[index]];
 }
 
-function ContentRow({ title, items, loading = false }) {
+function getQuality(item) {
+  if (item.rating > 8) return '4K HDR';
+  if (item.rating > 7) return 'HD';
+  return 'HD';
+}
+
+function getAgeRating(item) {
+  const ratings = ['13+', '16+', '18+', '7+', 'כללית'];
+  return ratings[(item.id || 0) % ratings.length];
+}
+
+function ContentRow({ title, items, loading = false, showProgress = false }) {
   const scrollRef = useRef(null);
+  const [hoveredId, setHoveredId] = useState(null);
 
   const scroll = (direction) => {
     if (scrollRef.current) {
-      const scrollAmount = direction === 'left' ? -400 : 400;
-      scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      const container = scrollRef.current;
+      const scrollAmount = direction === 'left' ? -container.clientWidth * 0.75 : container.clientWidth * 0.75;
+      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
 
   if (loading) {
     return (
-      <section className="py-5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="h-6 w-40 bg-[#232330] rounded-lg animate-shimmer mb-4" />
+      <section className="py-2 mb-4">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
+          <div className="h-6 w-40 bg-[#2a2a2a] rounded animate-shimmer mb-4" />
           <div className="scroll-row hide-scrollbar">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="w-[150px] sm:w-[170px] aspect-[2/3] bg-[#1a1a2e] rounded-xl animate-shimmer" />
+              <div key={i} className="w-[150px] sm:w-[200px] aspect-[2/3] bg-[#1f1f1f] rounded-md animate-shimmer" />
             ))}
           </div>
         </div>
@@ -46,53 +59,50 @@ function ContentRow({ title, items, loading = false }) {
   if (!items || items.length === 0) return null;
 
   return (
-    <section className="py-5 animate-fade-up">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <section className="py-2 mb-4 animate-fade-up">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
         {/* Section header */}
-        <div className="flex items-center gap-3 mb-4 px-1">
-          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">{title}</h2>
-          <div className="flex-1" />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => scroll('right')}
-              className="p-2 text-[#a0a0a0] hover:text-white hover:bg-white/5 rounded-lg transition-all"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => scroll('left')}
-              className="p-2 text-[#a0a0a0] hover:text-white hover:bg-white/5 rounded-lg transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-          </div>
+        <div className="flex items-center gap-3 mb-1 px-1">
+          <h2 className="row-title">{title}</h2>
+          <button
+            onClick={() => scroll('right')}
+            className="text-[#54b9c5] text-xs font-bold opacity-0 hover:opacity-100 transition-opacity hidden sm:block"
+          >
+            צפה הכל ←
+          </button>
         </div>
 
         {/* Row with side arrows */}
-        <div className="relative row-container">
+        <div className="relative row-container group">
           <button
             onClick={() => scroll('right')}
             className="row-nav-btn right hidden md:flex"
           >
-            <ChevronRight className="w-8 h-8" />
+            <ChevronRight className="w-10 h-10" />
           </button>
           <button
             onClick={() => scroll('left')}
             className="row-nav-btn left hidden md:flex"
           >
-            <ChevronLeft className="w-8 h-8" />
+            <ChevronLeft className="w-10 h-10" />
           </button>
 
           <div ref={scrollRef} className="scroll-row hide-scrollbar -mx-4 px-4">
             {items.map((item) => {
               const platform = getPlatformStyle(item);
+              const quality = getQuality(item);
+              const ageRating = getAgeRating(item);
+              const isHovered = hoveredId === `${item.type}-${item.id}`;
+
               return (
                 <Link
                   key={`${item.type}-${item.id}`}
                   to={`/detail/${item.type}/${item.id}`}
-                  className="group relative block w-[150px] sm:w-[170px]"
+                  className="group relative block w-[150px] sm:w-[200px] md:w-[240px]"
+                  onMouseEnter={() => setHoveredId(`${item.type}-${item.id}`)}
+                  onMouseLeave={() => setHoveredId(null)}
                 >
-                  <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-[#1a1a2e] transition-transform duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+                  <div className="relative aspect-[2/3] rounded-md overflow-hidden bg-[#1f1f1f] transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl group-hover:z-20">
                     {item.poster ? (
                       <img
                         src={item.poster}
@@ -101,26 +111,49 @@ function ContentRow({ title, items, loading = false }) {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-[#232330]">
-                        <Film className="w-8 h-8 text-[#8b8b9a]" />
+                      <div className="w-full h-full flex items-center justify-center bg-[#2a2a2a]">
+                        <span className="text-3xl font-black text-white/10">{item.title?.charAt(0)}</span>
+                      </div>
+                    )}
+
+                    {/* Simulated hover trailer */}
+                    {isHovered && item.backdrop && (
+                      <div className="hover-trailer">
+                        <img
+                          src={item.backdrop}
+                          alt=""
+                          className="w-full h-full object-cover animate-fade-in"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                       </div>
                     )}
 
                     {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-60 group-hover:opacity-90 transition-opacity duration-300" />
 
-                    {/* Hover play button */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <div className="w-12 h-12 rounded-full bg-[#e50914] flex items-center justify-center shadow-xl">
-                        <Play className="w-5 h-5 text-white mr-0.5" fill="white" />
+                    {/* Hover controls */}
+                    <div className="absolute inset-0 flex flex-col justify-end p-3 opacity-0 group-hover:opacity-100 transition-all duration-300 z-10">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
+                          <Play className="w-4 h-4 text-black mr-0.5" fill="black" />
+                        </div>
+                        <div className="w-8 h-8 rounded-full border border-white/50 flex items-center justify-center text-white hover:bg-white/10">
+                          <Plus className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-bold text-white line-clamp-1 mb-1">{item.title}</h4>
+                      <div className="flex items-center gap-2 text-[10px] text-[#b3b3b3]">
+                        <span className="text-[#46d369] font-bold">{Math.min(98, 85 + (item.id % 15))}%</span>
+                        <span className="age-badge">{ageRating}</span>
+                        <span>{item.type === 'tv' ? 'סדרה' : 'סרט'}</span>
                       </div>
                     </div>
 
-                    {/* IMDb Rating badge - yellow */}
+                    {/* IMDb Rating */}
                     {item.rating > 0 && (
-                      <div className="absolute top-2 left-2 flex items-center gap-0.5 bg-[#f5c518] rounded px-1 py-0.5 z-10">
-                        <Star className="w-2.5 h-2.5 text-black" fill="currentColor" />
-                        <span className="text-[10px] font-black text-black">{item.rating.toFixed(1)}</span>
+                      <div className="absolute top-2 left-2 imdb-badge z-10">
+                        <Star className="w-2.5 h-2.5" fill="black" />
+                        <span>{item.rating.toFixed(1)}</span>
                       </div>
                     )}
 
@@ -133,7 +166,7 @@ function ContentRow({ title, items, loading = false }) {
                     </div>
 
                     {/* Progress bar for continue watching */}
-                    {item.progress > 0 && item.duration > 0 && (
+                    {showProgress && item.progress > 0 && item.duration > 0 && (
                       <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 z-10">
                         <div className="progress-track">
                           <div
@@ -144,20 +177,11 @@ function ContentRow({ title, items, loading = false }) {
                       </div>
                     )}
 
-                    {/* Hover info */}
-                    <div className="absolute bottom-0 left-0 right-0 p-2.5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-10">
-                      <h4 className="text-xs font-bold text-white line-clamp-1">{item.title}</h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[9px] text-[#a0a0a0]">
-                        <span>{item.type === 'tv' ? 'סדרה' : 'סרט'}</span>
-                        {item.year && <span>{item.year}</span>}
-                      </div>
+                    {/* Quality badge */}
+                    <div className="absolute bottom-2 left-2 quality-badge z-10">
+                      {quality}
                     </div>
                   </div>
-
-                  {/* Hebrew title below */}
-                  <h3 className="mt-2 text-xs sm:text-sm font-medium text-white group-hover:text-[#e50914] transition-colors line-clamp-2">
-                    {item.title}
-                  </h3>
                 </Link>
               );
             })}
