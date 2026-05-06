@@ -1,59 +1,60 @@
 # StreamBox
 
-Streaming app with real Debrid integration, Stremio addon support, and multi-language UI.
+הדור הבא של סטרימינג - פלטפורמת סטרימינג פרימיום עם עיצוב עתידני, AI חכם, ספורט חי וטלוויזיה.
 
-## One-Click Deploy to Vercel
+## תכונות עיקריות
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
+- **עיצוב עתידני פרימיום** - Glass morphism, neon glows, אנימציות חלקות
+- **AI חכם** - עוזר אישי שמבין עברית, ממליץ תוכן, ועונה על שאלות
+- **ספורט חי** - תוצאות בזמן אמת, ליגות, היילייטס
+- **טלוויזיה חיה** - ערוצי עידן פלוס, חדשות, ספורט ובידור
+- **שחקן מרשים** - פקדים מינימליים, בורר איכות, כתוביות
+- **מובנה מלא** - ניווט תחתון, כרטיסי מגע, אנימציות 60fps
 
-## Deploy in 3 Steps
+## טכנולוגיות
 
-### 1. Go to Vercel
-Open [vercel.com/new](https://vercel.com/new)
+- React 18 + TypeScript
+- Vite
+- Tailwind CSS
+- Framer Motion
+- Zustand (state management)
+- React Query
+- TMDB API
 
-### 2. Import the ZIP
-Click **"Upload"** → Select `streambox-deploy.zip`
-
-### 3. Set Environment Variables
-In the Vercel dashboard before deploying, add:
-
-| Variable | Value | Required |
-|----------|-------|----------|
-| `VITE_TMDB_API_KEY` | Your TMDB API key | **Yes** |
-| `VITE_SUPABASE_URL` | Your Supabase URL | No |
-| `VITE_SUPABASE_ANON_KEY` | Your Supabase anon key | No |
-
-Get your **TMDB API key** free at: https://www.themoviedb.org/settings/api
-
-Click **Deploy**. Done.
-
-## What Works Out of the Box
-
-- **Real Debrid** — Add your API key in the Debrid tab, manage torrents, get unrestricted links
-- **Premiumize** — Same flow, full torrent management
-- **TorBox** — Same flow, full torrent management
-- **Stremio Addons** — Install any addon via URL in the Addons tab
-- **Player** — HLS adaptive streaming, quality picker, subtitle sync
-- **Auth** — Local auth (upgradeable to Supabase cloud)
-- **i18n** — Hebrew + English with RTL/LTR
-- **Multi-profile** — Create multiple user profiles
-
-## Project Structure
-
-```
-api/                  # Vercel serverless functions
-src/components/       # React UI components
-src/core/            # DebridManager, StreamEngine, etc.
-src/pages/           # Login, Signup
-src/contexts/        # Auth, watchlist, favorites, profiles
-src/i18n/            # Hebrew + English translations
-```
-
-## Local Dev
+## הרצה
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 npm run dev
 ```
 
-API routes work automatically in dev mode via Vite middleware.
+## בנייה
+
+```bash
+npm run build
+```
+
+## גישה
+
+- **אפליקציה**: http://localhost:3000/
+- **דף נחיתה**: http://localhost:3000/landing/
+
+## התחברות
+
+- **Google Sign-In** - לחץ על "התחבר עם Google"
+- **מספר טלפון** - הזן מספר וקוד OTP
+- **אימייל** - admin@streambox.local / Admin123 (מנהל)
+
+## מבנה פרויקט
+
+```
+src/
+  components/     - רכיבים משותפים
+  pages/          - דפים ראשיים
+  hooks/          - hooks מותאמים אישית
+  store/          - ניהול state (Zustand)
+  utils/          - פונקציות עזר
+  data/           - mock data
+  types/          - TypeScript types
+landing/          - דף נחיתה נפרד
+```
